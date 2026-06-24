@@ -118,16 +118,16 @@ Goal: production-readiness per §8.
 - [~] Swagger polish: full request/response schemas, examples (§4.2) — schemas auto-generate; **examples deferred**
 - [~] **Milestone:** clean security + perf review against §8 checklist — security/observability done; FV + Swagger-examples + deep-perf audit remain
 
-## Phase 9 — Deployment (Render + PostgreSQL + R2)  🟡 PREP DONE (live deploy needs user accounts)
-Goal: live on Render with Swagger reachable. *(Docker not installed locally — Render builds the image remotely; verify Dockerfile via Render build.)*
+## Phase 9 — Deployment (Render + PostgreSQL + R2)  ✅ LIVE
+Goal: live on Render with Swagger reachable. **DONE — live at `https://fastcart-backend.onrender.com`.**
 
-- [x] `Dockerfile` for reproducible build (§4.2) — multi-stage SDK10→aspnet10, layer-cached restore, binds Render `$PORT` (default 8080); `.dockerignore` added. **Image build unverified locally** (no Docker); validated via `dotnet publish` + Production dry-run
-- [x] Auto-apply migrations on deploy (startup hook or pre-deploy) (§9.2) — already wired (startup `MigrateAsync`+seed); confirmed in prod dry-run
-- [ ] Create Cloudflare R2 bucket; capture endpoint/keys/public URL (§9.5) — **needs user account**
-- [ ] Create Render PostgreSQL + Web Service; set §9.4 env vars — **needs user account**
-- [x] README with click-by-click deploy steps (§9) — `README.md` (architecture, local dev, §9.4 env table, R2→Render deploy guide)
-- [~] Health-check wired to Render; uptime ping to mitigate idle spin-down (§9.6) — `/health` exists + documented; Render health-check path + uptime ping set during deploy
-- [ ] **Milestone:** API live at `https://<service>.onrender.com`, Swagger at `/swagger` — pending live deploy
+- [x] `Dockerfile` for reproducible build (§4.2) — multi-stage SDK10→aspnet10, layer-cached restore, binds Render `$PORT`; `.dockerignore` added. **Built successfully by Render.**
+- [x] Auto-apply migrations on deploy (startup hook or pre-deploy) (§9.2) — startup `MigrateAsync`+seed; confirmed on prod (`Database migrated and seeded`)
+- [ ] Create Cloudflare R2 bucket; capture endpoint/keys/public URL (§9.5) — **skipped by user for now**; storage falls back to local disk (ephemeral on Render — uploaded images won't persist across redeploys). Add R2 env vars later to enable.
+- [x] Create Render PostgreSQL + Web Service; set §9.4 env vars — **done & live**
+- [x] README with click-by-click deploy steps (§9) — `README.md` + `API-ГАЙД.md` (full RU endpoint reference)
+- [~] Health-check wired to Render; uptime ping to mitigate idle spin-down (§9.6) — `/health` wired as Render health-check path; **external uptime ping not yet set up** (free tier still cold-starts after ~15 min idle)
+- [x] **Milestone:** API live at `https://fastcart-backend.onrender.com`, Swagger at `/swagger` — *verified: /health 200, /products & admin login & dashboard all 200 on prod*
 
 ---
 
@@ -161,3 +161,8 @@ Defaults are already chosen; flip any in one line.
 - **2026-06-24/25 — Phase 8 core hardening complete (polish deferred).** All verified live: **auth rate limiting** (built-in fixed-window, 10/60s per IP, enveloped 429 + `Retry-After`, `[EnableRateLimiting("auth")]` on `AuthController`); **secure-by-default authz** (global `FallbackPolicy=RequireAuthenticatedUser`; `[AllowAnonymous]` added to `HealthController`); **global UTC `DateTime` JSON converter** (`Api/Common/UtcDateTimeJsonConverter.cs`) root-fixing the `Unspecified→timestamptz` bug class for all body dates; **query-string date UTC** via shared `Application/Common/DateTimeExtensions.ToUtc()` (used in `AdminOrderService` + `DashboardService`); **InvariantCulture** money in coupon message (`CouponService:46`); **refresh-token pruning** (`ExecuteDeleteAsync` of dead tokens in `AuthService.IssueTokensAsync`); **structured logging** (`AddHttpLogging` method/path/status/duration + JSON console in Production, EF SQL command logs quieted to Warning). Carried-forward Phase-8 backlog (rate-limit, token-prune, money-culture) now all resolved.
   - **Deferred polish:** full FluentValidation migration (DataAnnotations already satisfies §8 "all bodies validated"); Swagger request/response examples; dedicated deep N+1/perf audit.
 - **2026-06-24/25 — Phase 9 prep done (live deploy needs user).** `Dockerfile` (multi-stage SDK10→aspnet10, `$PORT` bind), `.dockerignore`, `README.md` (deploy guide + §9.4 env table). Migrate-on-deploy already wired. **Docker image build NOT verifiable locally** (Docker not installed) — validated instead via `dotnet publish -c Release` + a **Production dry-run of the published DLL** (boots Production w/ JWT-secret fail-fast, binds `$PORT`, `/health` 200, JSON logs, migrate-on-startup ran). Remaining: create R2 bucket + Render PG/Web Service + env vars, then deploy.
+- **2026-06-25 — DEPLOYED & LIVE 🎉** `https://fastcart-backend.onrender.com` (Swagger at `/swagger`). Render Web Service (Docker) + Render PostgreSQL. **git repo created this session** (3 commits) + pushed to GitHub `https://github.com/Us-user/FastCart-Backend`. Seeded admin: `admin@gmail.com` / `Abuumar5` (verified login → JWT w/ Admin role → `/admin/dashboard/summary` 200). DB empty (no catalog seeded yet).
+  - **Two deploy fixes made & shipped:** (1) `DependencyInjection.BuildConnectionString` auto-converts `postgres(ql)://` URLs → Npgsql key-value + SSL (Render/Heroku/Railway give URL form); (2) `DependencyInjection.ResolveRawConnectionString` — reads `ConnectionStrings:DefaultConnection`, falls back to conventional `DATABASE_URL` env var (used by both DbContext + startup migrate check).
+  - **Deploy gotchas hit (for next time):** (a) `ConnectionStrings__DefaultConnection` env var wasn't picked up → switched to `DATABASE_URL`; (b) Render **Internal** DB URL (bare host `dpg-xxx-a`) failed → **External Database URL** (`...-a.oregon-postgres.render.com`) worked. Likely region mismatch internal-vs-external.
+  - **R2 skipped** — running on local disk storage (ephemeral on Render; image uploads won't survive redeploys). Add `Storage__R2__*` env vars to enable persistent images.
+  - **`API-ГАЙД.md`** added — full Russian endpoint reference (all routes, access levels, examples, error codes).

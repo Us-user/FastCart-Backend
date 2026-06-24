@@ -6,11 +6,16 @@ Cold-start handoff. `/start` reads the **▶ RESUME HERE** block first, then `RO
 ---
 
 ## ▶ RESUME HERE
-- **Done:** Phases 0–7 complete & **verified live**; Phase 8 **core hardening** done & verified; Phase 9 **deploy prep** done & dry-run-verified (details in `ROADMAP.md`).
-- **Next (pick one):**
-  - **(A) Finish Phase 8 polish** — add FluentValidation validators for complex bodies (register / product-create / checkout / coupon) and Swagger request/response examples; optional deep N+1/perf audit. *(Pure code, no schema change. Lowest external dependency.)*
-  - **(B) Go live — Phase 9 deploy** — **needs the user's accounts:** create Cloudflare R2 bucket (endpoint/keys/public URL), Render PostgreSQL + Web Service (Docker), set §9.4 env vars (incl. a strong `Jwt__Secret`), deploy, verify `/health` + `/swagger`. All steps are in `README.md`.
-- **Each session, before coding:**
+- **🎉 ALL PHASES DONE — BACKEND IS LIVE:** `https://fastcart-backend.onrender.com` (Swagger `/swagger`). Phases 0–9 complete & verified on prod. Repo: `https://github.com/Us-user/FastCart-Backend` (branch `main`).
+- **Prod admin:** `admin@gmail.com` / `Abuumar5` (seeded; verified login + Admin role + dashboard on prod).
+- **Next (optional — project goal is met; pick if continuing):**
+  - **(A) Seed/enter catalog data** — DB is empty on prod (no products/categories). Use admin endpoints (or write a seed) to populate so the storefront shows something.
+  - **(B) Enable persistent images** — add `Storage__R2__*` env vars (Cloudflare R2) in Render; currently local-disk storage = uploads vanish on redeploy.
+  - **(C) Keep-warm** — set an external uptime ping on `/health` (~10 min) to dodge free-tier cold starts (15–50s).
+  - **(D) Phase 8 polish (code)** — FluentValidation validators (register/product/checkout/coupon) + Swagger examples + deep N+1 audit. Pure code, no schema change.
+- **Uncommitted:** `API-ГАЙД.md` (new RU endpoint reference) is untracked; ROADMAP/this log were just updated. Commit+push if you want them on GitHub.
+- **Deploy gotchas (if redeploying / new env):** use Render **External** DB URL, not Internal (bare `dpg-xxx-a` host failed); the app reads `DATABASE_URL` **or** `ConnectionStrings__DefaultConnection`; `Jwt__Secret` must be ≥32 chars or Production fails fast.
+- **Each session, before coding (LOCAL dev only):**
   1. **Start PostgreSQL** (it is NOT a Windows service, so it is stopped after a reboot):
      ```powershell
      & "$env:USERPROFILE\scoop\apps\postgresql\current\bin\pg_ctl.exe" `
@@ -54,6 +59,7 @@ Cold-start handoff. `/start` reads the **▶ RESUME HERE** block first, then `RO
 - **P7** dashboard (§6.15): `summary?from=&to=` (Sales/Cost/Profit from line snapshots, excl. Cancelled/Returned), `revenue?year=` (12 months zero-filled, `Order.Total`), `top-products?metric=sales|units&take=`, `recent-transactions?take=`. New code only.
 - **P8 (core)** hardening: auth rate limiting (429); secure-by-default `FallbackPolicy`; global UTC `DateTime` JSON converter + `DateTimeExtensions.ToUtc()`; InvariantCulture money; refresh-token pruning; HttpLogging + Production JSON console (EF SQL quieted).
 - **P9 (prep)** deploy: `Dockerfile` (multi-stage, `$PORT`), `.dockerignore`, `README.md`; migrate-on-deploy already wired. Image build unverified locally (no Docker); validated via publish + Production dry-run.
+- **P9 (LIVE)** deployed to Render: `https://fastcart-backend.onrender.com`. Git repo + GitHub push; `postgres://`→Npgsql + `DATABASE_URL` fallback fixes; admin `admin@gmail.com`/`Abuumar5`. R2 skipped (local-disk/ephemeral); prod DB empty. `API-ГАЙД.md` (RU reference).
 
 ## Decisions / deviations from TZ
 - `ApplicationUser`/`ApplicationRole` live in Infrastructure (Domain stays dependency-free).
@@ -74,6 +80,33 @@ D8 tax (rate 0, no line) · D4 reviews (all customers) · D5 currency (USD) · D
 ---
 
 ## Session history
+
+## Session 05 — 2026-06-25
+**Phase:** Phase 9 (deployment) — **DEPLOYED & LIVE.** All phases (0–9) complete.
+**Done this session:**
+- **Deployed to production:** live at `https://fastcart-backend.onrender.com` (Swagger `/swagger`). Render Web Service (Docker build from repo) + Render PostgreSQL.
+- **Git:** initialized repo (was not under git), added `.gitignore`, **3 commits**, pushed to GitHub `https://github.com/Us-user/FastCart-Backend` (branch `main`). `appsettings.Development.json` kept in repo (dev-only values, no real secrets).
+- **Two deploy fixes (code, shipped):**
+  - `Infrastructure/DependencyInjection.cs` `BuildConnectionString()` — auto-converts `postgres(ql)://user:pass@host[:port]/db` URLs to Npgsql key-value form + `SslMode=Require;TrustServerCertificate=true` (managed hosts give URL form).
+  - `Infrastructure/DependencyInjection.cs` `ResolveRawConnectionString()` — resolves `ConnectionStrings:DefaultConnection`, else falls back to conventional `DATABASE_URL` env var. Used by DbContext registration **and** `Program.cs` startup migrate/seed check.
+- **Verified on prod:** `/health` 200; `/products` & `/categories` 200 (DB connected, migrations applied, tables empty); admin login `admin@gmail.com`/`Abuumar5` → JWT w/ Admin role → `/admin/dashboard/summary` 200.
+- **Docs:** `API-ГАЙД.md` — full Russian endpoint reference (20 sections: envelope, auth/roles, every route grouped w/ access level + purpose, JS examples, HTTP codes). *(untracked — not yet committed)*
+**Decisions / deviations from TZ:**
+- **R2 skipped for now** — deployed without `Storage__R2__*`, so storage = local disk (ephemeral on Render; uploaded images won't survive redeploys). Add R2 env vars later to enable persistence.
+- Connection string read from `DATABASE_URL` as well as `ConnectionStrings__DefaultConnection` (robustness for managed hosts).
+**Known issues / blockers:**
+- **Prod DB is empty** — no catalog seeded (only roles + admin). Storefront has nothing to show until data is added.
+- **Free-tier cold start** (~15–50s after 15 min idle) — no uptime ping configured yet.
+- **Images not persistent** until R2 is configured.
+- `API-ГАЙД.md` + updated ROADMAP/session-log are uncommitted (no commit/push done this turn per /stop rules).
+**Deploy gotchas hit (record for future):**
+- `ConnectionStrings__DefaultConnection` env var wasn't picked up by the running container → used `DATABASE_URL` instead (single word, typo-proof).
+- Render **Internal** DB URL (bare host `dpg-d8u43grtqb8s73aqhtr0-a`) failed to connect → **External Database URL** (`...-a.oregon-postgres.render.com`) worked (likely region/private-network mismatch).
+**Next steps (exact):**
+1. (Optional) Seed/enter catalog data via admin endpoints so the storefront is non-empty.
+2. (Optional) Add `Storage__R2__*` env vars in Render for persistent image storage.
+3. (Optional) Configure an external uptime ping on `/health` to avoid cold starts.
+4. (Optional) Phase 8 polish: FluentValidation validators + Swagger examples + N+1 audit.
 
 ## Session 04 — 2026-06-25
 **Phase:** Phase 7 (dashboard) **complete & verified**; Phase 8 **core hardening complete** (polish deferred); Phase 9 **deploy prep complete** (live deploy needs user accounts). **Next = Phase 8 polish (A) or Phase 9 live deploy (B).**
