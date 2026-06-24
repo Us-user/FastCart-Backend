@@ -40,12 +40,9 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("DefaultConnection");
+        var connectionString = BuildConnectionString(configuration.GetConnectionString("DefaultConnection"));
 
-        services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(string.IsNullOrWhiteSpace(connectionString)
-                ? "Host=localhost;Port=5432;Database=fastcart;Username=postgres;Password=postgres"
-                : connectionString));
+        services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
         services
             .AddIdentityCore<ApplicationUser>(options =>
@@ -113,5 +110,39 @@ public static class DependencyInjection
         services.AddScoped<IDashboardService, DashboardService>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Normalizes the connection string for Npgsql. Managed hosts (Render, Heroku, Railway)
+    /// hand out a <c>postgres(ql)://user:pass@host:port/db</c> URL, which Npgsql cannot parse —
+    /// convert it to key-value form and enable TLS. Already-key-value strings pass through;
+    /// an empty value falls back to the local dev database (§9.2/§9.4).
+    /// </summary>
+    private static string BuildConnectionString(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "Host=localhost;Port=5432;Database=fastcart;Username=postgres;Password=postgres";
+        }
+
+        if (!raw.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) &&
+            !raw.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+        {
+            return raw; // Already an Npgsql key-value connection string.
+        }
+
+        var uri = new Uri(raw);
+        var userInfo = uri.UserInfo.Split(':', 2);
+        var builder = new Npgsql.NpgsqlConnectionStringBuilder
+        {
+            Host = uri.Host,
+            Port = uri.Port > 0 ? uri.Port : 5432,
+            Database = uri.AbsolutePath.TrimStart('/'),
+            Username = Uri.UnescapeDataString(userInfo[0]),
+            Password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty,
+            SslMode = Npgsql.SslMode.Require,
+            TrustServerCertificate = true
+        };
+        return builder.ConnectionString;
     }
 }
