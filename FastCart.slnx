@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FastCart.Api/FastCart.Api.csproj" />
+    <Project Path="src/FastCart.Application/FastCart.Application.csproj" />
+    <Project Path="src/FastCart.Domain/FastCart.Domain.csproj" />
+    <Project Path="src/FastCart.Infrastructure/FastCart.Infrastructure.csproj" />
+  </Folder>
+</Solution>

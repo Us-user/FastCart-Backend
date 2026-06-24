@@ -1,0 +1,117 @@
+using FastCart.Application.Addresses;
+using FastCart.Application.AdminUsers;
+using FastCart.Application.Auth;
+using FastCart.Application.Carts;
+using FastCart.Application.Catalog;
+using FastCart.Application.Common.Interfaces;
+using FastCart.Application.Communications;
+using FastCart.Application.Content;
+using FastCart.Application.Dashboard;
+using FastCart.Application.Coupons;
+using FastCart.Application.Orders;
+using FastCart.Application.Payments;
+using FastCart.Application.Profile;
+using FastCart.Application.Reviews;
+using FastCart.Application.Wishlists;
+using FastCart.Infrastructure.Catalog;
+using FastCart.Infrastructure.Commerce;
+using FastCart.Infrastructure.Communications;
+using FastCart.Infrastructure.Content;
+using FastCart.Infrastructure.Dashboard;
+using FastCart.Infrastructure.Identity;
+using FastCart.Infrastructure.Messaging;
+using FastCart.Infrastructure.Orders;
+using FastCart.Infrastructure.Payments;
+using FastCart.Infrastructure.Persistence;
+using FastCart.Infrastructure.Storage;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace FastCart.Infrastructure;
+
+public static class DependencyInjection
+{
+    /// <summary>
+    /// Registers Infrastructure-layer services. Phase 1 plugs in EF Core / Npgsql and
+    /// ASP.NET Identity stores. Later phases add JWT/refresh services (Phase 2) and the
+    /// R2 storage abstraction (Phase 3).
+    /// </summary>
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    {
+        var connectionString = configuration.GetConnectionString("DefaultConnection");
+
+        services.AddDbContext<AppDbContext>(options =>
+            options.UseNpgsql(string.IsNullOrWhiteSpace(connectionString)
+                ? "Host=localhost;Port=5432;Database=fastcart;Username=postgres;Password=postgres"
+                : connectionString));
+
+        services
+            .AddIdentityCore<ApplicationUser>(options =>
+            {
+                options.User.RequireUniqueEmail = true;
+                options.Password.RequiredLength = 8;
+                options.Password.RequireDigit = true;
+                options.Password.RequireUppercase = true;
+                options.Password.RequireLowercase = true;
+                options.Password.RequireNonAlphanumeric = false;
+            })
+            .AddRoles<ApplicationRole>()
+            .AddEntityFrameworkStores<AppDbContext>()
+            .AddDefaultTokenProviders();
+
+        // Phase 2 — auth, profile, addresses, email.
+        services.AddScoped<JwtTokenGenerator>();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<IAddressService, AddressService>();
+        services.AddScoped<IEmailSender, LoggingEmailSender>();
+
+        // Storage — Cloudflare R2 when configured (§9.3/D12), else local disk for dev.
+        var r2 = configuration.GetSection("Storage:R2");
+        if (!string.IsNullOrWhiteSpace(r2["Endpoint"]) &&
+            !string.IsNullOrWhiteSpace(r2["AccessKeyId"]) &&
+            !string.IsNullOrWhiteSpace(r2["Bucket"]))
+        {
+            services.AddScoped<IStorageService, R2StorageService>();
+        }
+        else
+        {
+            services.AddScoped<IStorageService, LocalFileStorageService>();
+        }
+
+        // Phase 3 — catalog taxonomy.
+        services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<ISubCategoryService, SubCategoryService>();
+        services.AddScoped<IBrandService, BrandService>();
+        services.AddScoped<IColorService, ColorService>();
+        services.AddScoped<ITagService, TagService>();
+        services.AddScoped<IProductService, ProductService>();
+
+        // Phase 4 — cart, wishlist, reviews, coupons.
+        services.AddScoped<ICartService, CartService>();
+        services.AddScoped<IWishlistService, WishlistService>();
+        services.AddScoped<IReviewService, ReviewService>();
+        services.AddScoped<ICouponService, CouponService>();
+
+        // Phase 5 — payment providers (record-and-hold, §7.3/D2) + orders/checkout.
+        services.AddScoped<IPaymentProvider, CashOnDeliveryPaymentProvider>();
+        services.AddScoped<IPaymentProvider, ManualPaymentProvider>();
+        services.AddScoped<IPaymentProviderResolver, PaymentProviderResolver>();
+        services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<IAdminOrderService, AdminOrderService>();
+
+        // Phase 6 — CMS/content, newsletter, contact, admin users (§6.12–6.14).
+        services.AddScoped<ISliderService, SliderService>();
+        services.AddScoped<IBannerService, BannerService>();
+        services.AddScoped<INewsletterService, NewsletterService>();
+        services.AddScoped<IContactService, ContactService>();
+        services.AddScoped<IAdminUserService, AdminUserService>();
+
+        // Phase 7 — admin dashboard & reporting (§6.15).
+        services.AddScoped<IDashboardService, DashboardService>();
+
+        return services;
+    }
+}

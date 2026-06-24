@@ -1,0 +1,18 @@
+# Build artifacts — force a clean restore/build inside the image
+**/bin/
+**/obj/
+**/out/
+
+# Local-only / tooling
+.git/
+.gitignore
+.claude/
+.vs/
+.vscode/
+.idea/
+*.user
+
+# Dev secrets & docs (not needed in the image; Production never loads Development settings)
+**/appsettings.Development.json
+*.md
+FastCart-Backend-Technical-Specification-v1.2.md

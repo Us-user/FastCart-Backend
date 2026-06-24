@@ -1,0 +1,26 @@
+# Build output
+**/bin/
+**/obj/
+**/out/
+[Pp]ublish/
+
+# Local dev image uploads (LocalFileStorageService)
+src/FastCart.Api/wwwroot/uploads/
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local-only Claude settings (keep shared state/skills, drop machine-local overrides)
+.claude/settings.local.json
+
+# Secrets — never commit real production secrets
+appsettings.Production.json
+*.env
