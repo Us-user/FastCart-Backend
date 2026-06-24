@@ -233,7 +233,7 @@ using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var startupLogger = services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
-    var connectionString = app.Configuration.GetConnectionString("DefaultConnection");
+    var connectionString = DependencyInjection.ResolveRawConnectionString(app.Configuration);
 
     if (string.IsNullOrWhiteSpace(connectionString))
     {

@@ -40,7 +40,7 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        var connectionString = BuildConnectionString(configuration.GetConnectionString("DefaultConnection"));
+        var connectionString = BuildConnectionString(ResolveRawConnectionString(configuration));
 
         services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
@@ -110,6 +110,19 @@ public static class DependencyInjection
         services.AddScoped<IDashboardService, DashboardService>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Resolves the raw connection string. Prefers <c>ConnectionStrings:DefaultConnection</c>
+    /// (env <c>ConnectionStrings__DefaultConnection</c>); falls back to the conventional
+    /// <c>DATABASE_URL</c> env var used by Render/Heroku/Railway. Null/empty if neither is set.
+    /// </summary>
+    public static string? ResolveRawConnectionString(IConfiguration configuration)
+    {
+        var fromConnectionStrings = configuration.GetConnectionString("DefaultConnection");
+        return !string.IsNullOrWhiteSpace(fromConnectionStrings)
+            ? fromConnectionStrings
+            : configuration["DATABASE_URL"];
     }
 
     /// <summary>
