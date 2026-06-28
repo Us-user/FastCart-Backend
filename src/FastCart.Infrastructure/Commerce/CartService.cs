@@ -137,8 +137,8 @@ public sealed class CartService : ICartService
                     .Select(ov => new { ov.ProductOptionValue.ProductOption.Name, ov.ProductOptionValue.Value }).ToList(),
                 ImageUrl = i.ProductVariant.Product.Images
                     .OrderByDescending(im => im.IsPrimary).ThenBy(im => im.SortOrder).Select(im => im.Url).FirstOrDefault(),
-                UnitPrice = i.ProductVariant.HasDiscount && i.ProductVariant.DiscountPrice != null
-                    ? i.ProductVariant.DiscountPrice!.Value : i.ProductVariant.Price,
+                UnitPrice = i.ProductVariant.Product.HasDiscount && i.ProductVariant.Product.DiscountPrice != null
+                    ? i.ProductVariant.Product.DiscountPrice!.Value : i.ProductVariant.Product.Price,
                 i.Quantity,
                 i.ProductVariant.StockCount,
                 i.ProductVariant.IsActive

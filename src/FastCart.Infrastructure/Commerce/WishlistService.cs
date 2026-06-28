@@ -27,8 +27,7 @@ public sealed class WishlistService : IWishlistService
                 w.ProductId,
                 w.Product.Name,
                 w.Product.Images.OrderByDescending(im => im.IsPrimary).ThenBy(im => im.SortOrder).Select(im => im.Url).FirstOrDefault(),
-                w.Product.Variants.Where(v => v.IsActive)
-                    .Min(v => (decimal?)(v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price)),
+                (decimal?)(w.Product.HasDiscount && w.Product.DiscountPrice != null ? w.Product.DiscountPrice!.Value : w.Product.Price),
                 w.Product.Variants.Any(v => v.IsActive && v.StockCount > 0),
                 w.Product.Variants.Count(v => v.IsActive)))
             .ToListAsync(ct);

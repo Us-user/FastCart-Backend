@@ -4,8 +4,8 @@ using FastCart.Domain.Enums;
 namespace FastCart.Domain.Entities;
 
 /// <summary>
-/// Product — shared attributes only. All money and stock live on variants (§5.2, D1).
-/// <see cref="BaseEntity.CreatedAt"/> drives the "New Arrival" / NEW badge.
+/// Product — shared attributes including price. Stock lives on variants; sizes/colours
+/// are option values on variants. <see cref="BaseEntity.CreatedAt"/> drives the NEW badge.
 /// </summary>
 public class Product : BaseEntity
 {
@@ -21,6 +21,14 @@ public class Product : BaseEntity
 
     public bool IsTaxable { get; set; }
     public ProductCondition? Condition { get; set; }
+
+    public decimal Price { get; set; }
+    public bool HasDiscount { get; set; }
+    public decimal? DiscountPrice { get; set; }
+    public decimal CostPrice { get; set; }
+
+    /// <summary>Effective price = DiscountPrice when HasDiscount, else Price.</summary>
+    public decimal EffectivePrice => HasDiscount && DiscountPrice.HasValue ? DiscountPrice.Value : Price;
 
     public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
     public ICollection<ProductTag> ProductTags { get; set; } = new List<ProductTag>();
@@ -75,25 +83,18 @@ public class ProductOptionValue : BaseEntity
 }
 
 /// <summary>
-/// One sellable combination of option values — carries the money and stock (§5.2, D1).
-/// Not every possible combination need exist (D13).
+/// One sellable combination of option values — carries stock only (§5.2, D1).
+/// Price lives on the parent Product. Not every possible combination need exist (D13).
 /// </summary>
 public class ProductVariant : BaseEntity
 {
     public int ProductId { get; set; }
     public Product Product { get; set; } = default!;
     public string Sku { get; set; } = default!;
-    public decimal Price { get; set; }
-    public bool HasDiscount { get; set; }
-    public decimal? DiscountPrice { get; set; }
-    public decimal CostPrice { get; set; }
     public int StockCount { get; set; }
     public bool IsActive { get; set; } = true;
 
     public ICollection<ProductVariantOptionValue> OptionValues { get; set; } = new List<ProductVariantOptionValue>();
-
-    /// <summary>Effective price = DiscountPrice when HasDiscount, else Price (§5.2).</summary>
-    public decimal EffectivePrice => HasDiscount && DiscountPrice.HasValue ? DiscountPrice.Value : Price;
 }
 
 /// <summary>

@@ -39,8 +39,9 @@ public sealed record ProductListItemDto
     public string CategoryName { get; init; } = default!;
     public string SubCategoryName { get; init; } = default!;
     public string? PrimaryImageUrl { get; init; }
-    public decimal? FromPrice { get; init; }
-    public decimal? MaxPrice { get; init; }
+    public decimal Price { get; init; }
+    public decimal? DiscountPrice { get; init; }
+    public decimal EffectivePrice { get; init; }
     public bool HasDiscount { get; init; }
     public bool InStock { get; init; }
     public ProductCondition? Condition { get; init; }
@@ -73,16 +74,17 @@ public sealed record ProductDetailDto(
     IReadOnlyList<VariantDto> Variants,
     double AvgRating,
     int ReviewCount,
-    decimal? FromPrice,
-    decimal? MaxPrice,
+    decimal Price,
+    bool HasDiscount,
+    decimal? DiscountPrice,
+    decimal EffectivePrice,
     bool InStock);
 
 public sealed record ImageDto(int Id, string Url, bool IsPrimary, int SortOrder);
 public sealed record OptionDto(int Id, string Name, int SortOrder, IReadOnlyList<OptionValueDto> Values);
 public sealed record OptionValueDto(int Id, string Value, int? ColorId, string? ColorHex, int SortOrder);
 public sealed record VariantDto(
-    int Id, string Sku, decimal Price, bool HasDiscount, decimal? DiscountPrice,
-    decimal EffectivePrice, int StockCount, bool IsActive, IReadOnlyList<VariantOptionDto> Options);
+    int Id, string Sku, int StockCount, bool IsActive, IReadOnlyList<VariantOptionDto> Options);
 public sealed record VariantOptionDto(string OptionName, string Value);
 
 // ── Filtering / sorting / paging (§6.5) ─────────────────────────────────────
@@ -119,6 +121,10 @@ public sealed record CreateProductRequest
     public int BrandId { get; init; }
     public bool IsTaxable { get; init; }
     public ProductCondition? Condition { get; init; }
+    public decimal Price { get; init; }
+    public bool HasDiscount { get; init; }
+    public decimal? DiscountPrice { get; init; }
+    public decimal CostPrice { get; init; }
     public List<int> TagIds { get; init; } = new();
     public List<CreateOptionInput> Options { get; init; } = new();
     public List<CreateVariantInput> Variants { get; init; } = new();
@@ -143,10 +149,6 @@ public sealed record CreateVariantInput
 {
     public string Sku { get; init; } = default!;
     public List<VariantOptionValueInput> OptionValues { get; init; } = new();
-    public decimal Price { get; init; }
-    public bool HasDiscount { get; init; }
-    public decimal? DiscountPrice { get; init; }
-    public decimal CostPrice { get; init; }
     public int Count { get; init; }
     public bool IsActive { get; init; } = true;
 }
@@ -172,13 +174,16 @@ public sealed record UpdateProductRequest
     public int? BrandId { get; init; }
     public bool? IsTaxable { get; init; }
     public ProductCondition? Condition { get; init; }
+    public decimal? Price { get; init; }
+    public bool? HasDiscount { get; init; }
+    public decimal? DiscountPrice { get; init; }
+    public decimal? CostPrice { get; init; }
     public List<int>? TagIds { get; init; }
 }
 
-/// <summary>Variant projection for admin — includes CostPrice (hidden from public detail).</summary>
+/// <summary>Variant projection for admin — stock and options only; price lives on the product.</summary>
 public sealed record AdminVariantDto(
-    int Id, string Sku, decimal Price, bool HasDiscount, decimal? DiscountPrice, decimal EffectivePrice,
-    decimal CostPrice, int StockCount, bool IsActive, IReadOnlyList<VariantOptionDto> Options);
+    int Id, string Sku, int StockCount, bool IsActive, IReadOnlyList<VariantOptionDto> Options);
 
 public sealed record AddVariantRequest
 {
@@ -186,10 +191,6 @@ public sealed record AddVariantRequest
 
     /// <summary>One existing option-value id per option axis of the product (§6.5/§8).</summary>
     public List<int> OptionValueIds { get; init; } = new();
-    public decimal Price { get; init; }
-    public bool HasDiscount { get; init; }
-    public decimal? DiscountPrice { get; init; }
-    public decimal CostPrice { get; init; }
     public int Count { get; init; }
     public bool IsActive { get; init; } = true;
 }
@@ -197,10 +198,6 @@ public sealed record AddVariantRequest
 public sealed record UpdateVariantRequest
 {
     public string? Sku { get; init; }
-    public decimal? Price { get; init; }
-    public bool? HasDiscount { get; init; }
-    public decimal? DiscountPrice { get; init; }
-    public decimal? CostPrice { get; init; }
     public int? Count { get; init; }
     public bool? IsActive { get; init; }
 }

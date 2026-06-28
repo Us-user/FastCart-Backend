@@ -9,9 +9,9 @@ using Microsoft.EntityFrameworkCore;
 namespace FastCart.Infrastructure.Catalog;
 
 /// <summary>
-/// Products & variants (§6.5). List/detail are variant-aware: fromPrice = min effective
-/// price over active variants, inStock = any active variant with stock, swatches = colour
-/// option values present. Effective price = DiscountPrice when HasDiscount, else Price.
+/// Products & variants (§6.5). Price is product-level (not per-variant). List/detail expose
+/// inStock = any active variant with stock, swatches = colour option values present.
+/// Effective price = DiscountPrice when HasDiscount, else Price.
 /// </summary>
 public sealed class ProductService : IProductService
 {
@@ -58,14 +58,14 @@ public sealed class ProductService : IProductService
                     o.Values.OrderBy(v => v.SortOrder)
                         .Select(v => new OptionValueDto(v.Id, v.Value, v.ColorId, v.Color!.HexCode, v.SortOrder)).ToList())).ToList(),
                 p.Variants.OrderBy(v => v.Id).Select(v => new VariantDto(
-                    v.Id, v.Sku, v.Price, v.HasDiscount, v.DiscountPrice,
-                    v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price,
-                    v.StockCount, v.IsActive,
+                    v.Id, v.Sku, v.StockCount, v.IsActive,
                     v.OptionValues.Select(ov => new VariantOptionDto(ov.ProductOptionValue.ProductOption.Name, ov.ProductOptionValue.Value)).ToList())).ToList(),
                 p.Reviews.Average(r => (double?)r.Rating) ?? 0,
                 p.Reviews.Count(),
-                p.Variants.Where(v => v.IsActive).Min(v => (decimal?)(v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price)),
-                p.Variants.Where(v => v.IsActive).Max(v => (decimal?)(v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price)),
+                p.Price,
+                p.HasDiscount,
+                p.HasDiscount ? p.DiscountPrice : null,
+                p.HasDiscount && p.DiscountPrice != null ? p.DiscountPrice!.Value : p.Price,
                 p.Variants.Any(v => v.IsActive && v.StockCount > 0)))
             .FirstOrDefaultAsync(ct);
 
@@ -138,7 +138,11 @@ public sealed class ProductService : IProductService
             SubCategoryId = request.SubCategoryId,
             BrandId = request.BrandId,
             IsTaxable = request.IsTaxable,
-            Condition = request.Condition
+            Condition = request.Condition,
+            Price = request.Price,
+            HasDiscount = request.HasDiscount,
+            DiscountPrice = request.DiscountPrice,
+            CostPrice = request.CostPrice
         };
 
         // Options + values, indexed by (optionName, value) for variant linking.
@@ -175,10 +179,6 @@ public sealed class ProductService : IProductService
             var variant = new ProductVariant
             {
                 Sku = variantInput.Sku,
-                Price = variantInput.Price,
-                HasDiscount = variantInput.HasDiscount,
-                DiscountPrice = variantInput.DiscountPrice,
-                CostPrice = variantInput.CostPrice,
                 StockCount = variantInput.Count,
                 IsActive = variantInput.IsActive
             };
@@ -242,6 +242,10 @@ public sealed class ProductService : IProductService
         if (request.Description is not null) product.Description = request.Description;
         if (request.IsTaxable is not null) product.IsTaxable = request.IsTaxable.Value;
         if (request.Condition is not null) product.Condition = request.Condition;
+        if (request.Price is not null) product.Price = request.Price.Value;
+        if (request.HasDiscount is not null) product.HasDiscount = request.HasDiscount.Value;
+        if (request.DiscountPrice is not null) product.DiscountPrice = request.DiscountPrice;
+        if (request.CostPrice is not null) product.CostPrice = request.CostPrice.Value;
 
         if (request.TagIds is not null)
         {
@@ -309,9 +313,7 @@ public sealed class ProductService : IProductService
     {
         if (!await _db.Products.AnyAsync(p => p.Id == id, ct)) throw new NotFoundException("Product not found.");
         return await _db.ProductVariants.AsNoTracking().Where(v => v.ProductId == id).OrderBy(v => v.Id)
-            .Select(v => new AdminVariantDto(v.Id, v.Sku, v.Price, v.HasDiscount, v.DiscountPrice,
-                v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price,
-                v.CostPrice, v.StockCount, v.IsActive,
+            .Select(v => new AdminVariantDto(v.Id, v.Sku, v.StockCount, v.IsActive,
                 v.OptionValues.Select(ov => new VariantOptionDto(ov.ProductOptionValue.ProductOption.Name, ov.ProductOptionValue.Value)).ToList()))
             .ToListAsync(ct);
     }
@@ -351,10 +353,6 @@ public sealed class ProductService : IProductService
         {
             ProductId = id,
             Sku = request.Sku,
-            Price = request.Price,
-            HasDiscount = request.HasDiscount,
-            DiscountPrice = request.DiscountPrice,
-            CostPrice = request.CostPrice,
             StockCount = request.Count,
             IsActive = request.IsActive
         };
@@ -376,10 +374,6 @@ public sealed class ProductService : IProductService
                 throw new ConflictException("SKU already exists.");
             variant.Sku = request.Sku;
         }
-        if (request.Price is not null) variant.Price = request.Price.Value;
-        if (request.HasDiscount is not null) variant.HasDiscount = request.HasDiscount.Value;
-        if (request.DiscountPrice is not null) variant.DiscountPrice = request.DiscountPrice;
-        if (request.CostPrice is not null) variant.CostPrice = request.CostPrice.Value;
         if (request.Count is not null) variant.StockCount = request.Count.Value;
         if (request.IsActive is not null) variant.IsActive = request.IsActive.Value;
 
@@ -448,9 +442,7 @@ public sealed class ProductService : IProductService
 
     private async Task<AdminVariantDto> GetAdminVariantAsync(int variantId, CancellationToken ct) =>
         await _db.ProductVariants.AsNoTracking().Where(v => v.Id == variantId)
-            .Select(v => new AdminVariantDto(v.Id, v.Sku, v.Price, v.HasDiscount, v.DiscountPrice,
-                v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price,
-                v.CostPrice, v.StockCount, v.IsActive,
+            .Select(v => new AdminVariantDto(v.Id, v.Sku, v.StockCount, v.IsActive,
                 v.OptionValues.Select(ov => new VariantOptionDto(ov.ProductOptionValue.ProductOption.Name, ov.ProductOptionValue.Value)).ToList()))
             .FirstAsync(ct);
 
@@ -478,17 +470,15 @@ public sealed class ProductService : IProductService
             query = query.Where(p => p.Variants.Any(v =>
                 v.OptionValues.Any(ov => ov.ProductOptionValue.ColorId != null && f.ColorIds.Contains(ov.ProductOptionValue.ColorId!.Value))));
         if (f.MinPrice is not null)
-            query = query.Where(p => p.Variants.Any(v => v.IsActive &&
-                (v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price) >= f.MinPrice));
+            query = query.Where(p => (p.HasDiscount && p.DiscountPrice != null ? p.DiscountPrice!.Value : p.Price) >= f.MinPrice);
         if (f.MaxPrice is not null)
-            query = query.Where(p => p.Variants.Any(v => v.IsActive &&
-                (v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price) <= f.MaxPrice));
+            query = query.Where(p => (p.HasDiscount && p.DiscountPrice != null ? p.DiscountPrice!.Value : p.Price) <= f.MaxPrice);
         if (f.Condition is not null)
             query = query.Where(p => p.Condition == f.Condition);
         if (f.MinRating is not null)
             query = query.Where(p => (p.Reviews.Average(r => (double?)r.Rating) ?? 0) >= f.MinRating);
         if (f.HasDiscount == true)
-            query = query.Where(p => p.Variants.Any(v => v.IsActive && v.HasDiscount));
+            query = query.Where(p => p.HasDiscount);
         if (f.IsNew == true)
             query = query.Where(p => p.CreatedAt >= newCutoff);
         if (f.InStock == true)
@@ -498,10 +488,8 @@ public sealed class ProductService : IProductService
 
     private IQueryable<Product> ApplySort(IQueryable<Product> query, string? sort) => sort switch
     {
-        "price_asc" => query.OrderBy(p => p.Variants.Where(v => v.IsActive)
-            .Min(v => (decimal?)(v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price))),
-        "price_desc" => query.OrderByDescending(p => p.Variants.Where(v => v.IsActive)
-            .Min(v => (decimal?)(v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price))),
+        "price_asc" => query.OrderBy(p => p.HasDiscount && p.DiscountPrice != null ? p.DiscountPrice!.Value : p.Price),
+        "price_desc" => query.OrderByDescending(p => p.HasDiscount && p.DiscountPrice != null ? p.DiscountPrice!.Value : p.Price),
         "rating" => query.OrderByDescending(p => p.Reviews.Average(r => (double?)r.Rating) ?? 0),
         "popularity" => query.OrderByDescending(p => _db.OrderItems.Where(oi => oi.ProductId == p.Id).Sum(oi => (int?)oi.Quantity) ?? 0),
         _ => query.OrderByDescending(p => p.CreatedAt) // newest (default)
@@ -518,11 +506,10 @@ public sealed class ProductService : IProductService
             SubCategoryName = p.SubCategory.Name,
             PrimaryImageUrl = p.Images.OrderByDescending(i => i.IsPrimary).ThenBy(i => i.SortOrder)
                 .Select(i => i.Url).FirstOrDefault(),
-            FromPrice = p.Variants.Where(v => v.IsActive)
-                .Min(v => (decimal?)(v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price)),
-            MaxPrice = p.Variants.Where(v => v.IsActive)
-                .Max(v => (decimal?)(v.HasDiscount && v.DiscountPrice != null ? v.DiscountPrice!.Value : v.Price)),
-            HasDiscount = p.Variants.Any(v => v.IsActive && v.HasDiscount),
+            Price = p.Price,
+            DiscountPrice = p.HasDiscount ? p.DiscountPrice : null,
+            EffectivePrice = p.HasDiscount && p.DiscountPrice != null ? p.DiscountPrice!.Value : p.Price,
+            HasDiscount = p.HasDiscount,
             InStock = p.Variants.Any(v => v.IsActive && v.StockCount > 0),
             Condition = p.Condition,
             IsNew = p.CreatedAt >= newCutoff,

@@ -90,7 +90,7 @@ public sealed class AdminOrderService : IAdminOrderService
                 throw new ConflictException($"Only {v.StockCount} left of '{v.Product.Name}' ({v.Sku}).");
             }
 
-            var unitPrice = v.EffectivePrice;
+            var unitPrice = v.Product.EffectivePrice;
             var lineTotal = Math.Round(unitPrice * line.Quantity, 2);
             subtotal += lineTotal;
             v.StockCount -= line.Quantity;
@@ -103,7 +103,7 @@ public sealed class AdminOrderService : IAdminOrderService
                 Sku = v.Sku,
                 VariantDescription = OrderingHelpers.DescribeVariant(v),
                 UnitPrice = unitPrice,
-                UnitCost = v.CostPrice,
+                UnitCost = v.Product.CostPrice,
                 Quantity = line.Quantity,
                 LineTotal = lineTotal
             });

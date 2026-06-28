@@ -63,7 +63,7 @@ public sealed class OrderService : IOrderService
                 throw new ConflictException($"Only {v.StockCount} left of '{v.Product.Name}' ({v.Sku}).");
             }
 
-            var unitPrice = v.EffectivePrice;
+            var unitPrice = v.Product.EffectivePrice;
             var lineTotal = Math.Round(unitPrice * item.Quantity, 2);
             subtotal += lineTotal;
             if (v.Product.IsTaxable) taxableSubtotal += lineTotal;
@@ -76,7 +76,7 @@ public sealed class OrderService : IOrderService
                 Sku = v.Sku,
                 VariantDescription = OrderingHelpers.DescribeVariant(v),
                 UnitPrice = unitPrice,
-                UnitCost = v.CostPrice,
+                UnitCost = v.Product.CostPrice,
                 Quantity = item.Quantity,
                 LineTotal = lineTotal
             });

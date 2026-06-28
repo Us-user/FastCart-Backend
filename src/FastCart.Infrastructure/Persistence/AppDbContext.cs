@@ -135,6 +135,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
             e.Property(p => p.Condition).HasConversion<string>().HasMaxLength(20);
             e.HasIndex(p => p.Name);
             e.HasIndex(p => p.CreatedAt);
+            e.HasIndex(p => p.Price);
+            e.Ignore(p => p.EffectivePrice);
 
             e.HasOne(p => p.SubCategory)
                 .WithMany(s => s.Products)
@@ -192,7 +194,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
         {
             e.Property(v => v.Sku).HasMaxLength(64);
             e.HasIndex(v => v.Sku).IsUnique();
-            e.HasIndex(v => v.Price);
             e.HasOne(v => v.Product)
                 .WithMany(p => p.Variants)
                 .HasForeignKey(v => v.ProductId)
