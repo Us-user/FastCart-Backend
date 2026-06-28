@@ -56,9 +56,11 @@ public static class DbSeeder
             }
         }
 
-        if (!await userManager.IsInRoleAsync(admin, Roles.Admin))
+        // The seeded account is the Boss — the top of the hierarchy and the only way
+        // a Boss can exist, since the role is not grantable via the API (§4.4).
+        if (!await userManager.IsInRoleAsync(admin, Roles.Boss))
         {
-            await userManager.AddToRoleAsync(admin, Roles.Admin);
+            await userManager.AddToRoleAsync(admin, Roles.Boss);
         }
     }
 }

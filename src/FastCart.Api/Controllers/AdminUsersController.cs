@@ -12,7 +12,7 @@ namespace FastCart.Api.Controllers;
 [ApiController]
 [Produces("application/json")]
 [Route("api/v1/admin/users")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize(Roles = Roles.Management)]
 public sealed class AdminUsersController : ControllerBase
 {
     private readonly IAdminUserService _users;
@@ -44,7 +44,7 @@ public sealed class AdminUsersController : ControllerBase
     [HttpPost("{id}/roles")]
     public async Task<IActionResult> AssignRole(string id, [FromBody] AssignRoleRequest request, CancellationToken ct)
     {
-        await _users.AssignRoleAsync(id, request.RoleId, ct);
+        await _users.AssignRoleAsync(id, request.RoleId, CurrentUserId, ct);
         return Ok(ApiResponse.Ok("Role assigned."));
     }
 
@@ -60,7 +60,7 @@ public sealed class AdminUsersController : ControllerBase
 [ApiController]
 [Produces("application/json")]
 [Route("api/v1/admin/roles")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize(Roles = Roles.Management)]
 public sealed class AdminRolesController : ControllerBase
 {
     private readonly IAdminUserService _users;

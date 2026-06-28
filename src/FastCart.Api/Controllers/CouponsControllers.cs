@@ -22,7 +22,7 @@ public sealed class CouponsController : BaseApiController
 [ApiController]
 [Produces("application/json")]
 [Route("api/v1/admin/coupons")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize(Roles = Roles.Management)]
 public sealed class AdminCouponsController : ControllerBase
 {
     private readonly ICouponService _coupons;

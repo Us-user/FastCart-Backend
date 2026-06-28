@@ -11,7 +11,7 @@ namespace FastCart.Api.Controllers;
 [ApiController]
 [Produces("application/json")]
 [Route("api/v1/admin/orders")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize(Roles = Roles.Management)]
 public sealed class AdminOrdersController : ControllerBase
 {
     private readonly IAdminOrderService _orders;
@@ -64,7 +64,7 @@ public sealed class AdminOrdersController : ControllerBase
 [ApiController]
 [Produces("application/json")]
 [Route("api/v1/admin/returns")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize(Roles = Roles.Management)]
 public sealed class AdminReturnsController : ControllerBase
 {
     private readonly IAdminOrderService _orders;

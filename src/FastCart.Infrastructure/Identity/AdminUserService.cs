@@ -95,12 +95,29 @@ public sealed class AdminUserService : IAdminUserService
         }
     }
 
-    public async Task AssignRoleAsync(string id, string roleId, CancellationToken ct = default)
+    public async Task AssignRoleAsync(string id, string roleId, string currentUserId, CancellationToken ct = default)
     {
         var user = await _users.FindByIdAsync(id)
             ?? throw new NotFoundException("User not found.");
         var role = await _roles.FindByIdAsync(roleId)
             ?? throw new NotFoundException("Role not found.");
+
+        var callerLevel = await CallerLevelAsync(currentUserId);
+        var targetLevel = Roles.Level(role.Name);
+
+        // Boss is never grantable through the API (§4.4) — it is seeded only.
+        if (targetLevel >= Roles.Level(Roles.Boss))
+        {
+            throw new BusinessRuleException("The Boss role cannot be assigned.");
+        }
+
+        // You can grant roles up to your own level, capped at SuperAdmin (a Boss
+        // tops out at granting SuperAdmin, an Admin at granting Admin).
+        var grantCap = Math.Min(callerLevel, Roles.Level(Roles.SuperAdmin));
+        if (targetLevel > grantCap)
+        {
+            throw new BusinessRuleException("You do not have permission to assign this role.");
+        }
 
         if (await _users.IsInRoleAsync(user, role.Name!))
         {
@@ -121,9 +138,26 @@ public sealed class AdminUserService : IAdminUserService
         var role = await _roles.FindByIdAsync(roleId)
             ?? throw new NotFoundException("Role not found.");
 
-        if (id == currentUserId && string.Equals(role.Name, Roles.Admin, StringComparison.OrdinalIgnoreCase))
+        var callerLevel = await CallerLevelAsync(currentUserId);
+        var targetLevel = Roles.Level(role.Name);
+
+        // The Boss role can never be revoked through the API (§4.4).
+        if (targetLevel >= Roles.Level(Roles.Boss))
         {
-            throw new BusinessRuleException("You cannot remove the Admin role from your own account.");
+            throw new BusinessRuleException("The Boss role cannot be removed.");
+        }
+
+        // Anti-lockout: nobody may strip an elevated role from their own account.
+        if (id == currentUserId && targetLevel >= Roles.Level(Roles.Admin))
+        {
+            throw new BusinessRuleException("You cannot remove a management role from your own account.");
+        }
+
+        // Only SuperAdmin+ may revoke, and only roles strictly below their own level
+        // (Admins cannot revoke; SuperAdmins revoke Admin and below; Boss revokes SuperAdmin and below).
+        if (callerLevel < Roles.Level(Roles.SuperAdmin) || targetLevel >= callerLevel)
+        {
+            throw new BusinessRuleException("You do not have permission to remove this role.");
         }
 
         if (!await _users.IsInRoleAsync(user, role.Name!))
@@ -136,6 +170,15 @@ public sealed class AdminUserService : IAdminUserService
         {
             throw new ConflictException(string.Join(" ", result.Errors.Select(e => e.Description)));
         }
+    }
+
+    /// <summary>Highest privilege level held by the acting user.</summary>
+    private async Task<int> CallerLevelAsync(string currentUserId)
+    {
+        var caller = await _users.FindByIdAsync(currentUserId)
+            ?? throw new UnauthorizedException();
+        var roles = await _users.GetRolesAsync(caller);
+        return Roles.HighestLevel(roles);
     }
 
     public async Task<IReadOnlyList<RoleDto>> ListRolesAsync(CancellationToken ct = default) =>

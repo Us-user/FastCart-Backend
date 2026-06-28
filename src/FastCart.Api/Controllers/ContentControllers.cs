@@ -25,7 +25,7 @@ public sealed class SlidersController : BaseApiController
 [ApiController]
 [Produces("application/json")]
 [Route("api/v1/admin/sliders")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize(Roles = Roles.Management)]
 public sealed class AdminSlidersController : ControllerBase
 {
     private readonly ISliderService _service;
@@ -102,7 +102,7 @@ public sealed class BannersController : BaseApiController
 [ApiController]
 [Produces("application/json")]
 [Route("api/v1/admin/banners")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize(Roles = Roles.Management)]
 public sealed class AdminBannersController : ControllerBase
 {
     private readonly IBannerService _service;

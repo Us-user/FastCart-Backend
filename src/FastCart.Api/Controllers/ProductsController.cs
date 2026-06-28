@@ -38,7 +38,7 @@ public sealed class ProductsController : BaseApiController
     public async Task<IActionResult> Related(int id, [FromQuery] int take = 8, CancellationToken ct = default) =>
         Ok(ApiResponse<IReadOnlyList<ProductListItemDto>>.Ok(await _service.GetRelatedAsync(id, take, ct)));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPost]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> Create([FromForm] CreateProductForm form, CancellationToken ct)
@@ -65,12 +65,12 @@ public sealed class ProductsController : BaseApiController
         return Ok(ApiResponse<ProductDetailDto>.Ok(result, "Product created."));
     }
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateProductRequest request, CancellationToken ct) =>
         Ok(ApiResponse<ProductDetailDto>.Ok(await _service.UpdateAsync(id, request, ct), "Product updated."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
@@ -78,7 +78,7 @@ public sealed class ProductsController : BaseApiController
         return Ok(ApiResponse.Ok("Product deleted."));
     }
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPost("bulk-delete")]
     public async Task<IActionResult> BulkDelete([FromBody] BulkDeleteRequest request, CancellationToken ct)
     {
@@ -86,7 +86,7 @@ public sealed class ProductsController : BaseApiController
         return Ok(ApiResponse.Ok("Products deleted."));
     }
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPost("{id:int}/images")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> AddImages(int id, [FromForm] AddImagesForm form, CancellationToken ct)
@@ -97,7 +97,7 @@ public sealed class ProductsController : BaseApiController
         return Ok(ApiResponse<IReadOnlyList<ImageDto>>.Ok(await _service.AddImagesAsync(id, uploads, ct), "Images added."));
     }
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpDelete("{id:int}/images/{imageId:int}")]
     public async Task<IActionResult> DeleteImage(int id, int imageId, CancellationToken ct)
     {
@@ -105,22 +105,22 @@ public sealed class ProductsController : BaseApiController
         return Ok(ApiResponse.Ok("Image removed."));
     }
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpGet("{id:int}/variants")]
     public async Task<IActionResult> ListVariants(int id, CancellationToken ct) =>
         Ok(ApiResponse<IReadOnlyList<AdminVariantDto>>.Ok(await _service.ListVariantsAsync(id, ct)));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPost("{id:int}/variants")]
     public async Task<IActionResult> AddVariant(int id, [FromBody] AddVariantRequest request, CancellationToken ct) =>
         Ok(ApiResponse<AdminVariantDto>.Ok(await _service.AddVariantAsync(id, request, ct), "Variant added."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPut("{id:int}/variants/{variantId:int}")]
     public async Task<IActionResult> UpdateVariant(int id, int variantId, [FromBody] UpdateVariantRequest request, CancellationToken ct) =>
         Ok(ApiResponse<AdminVariantDto>.Ok(await _service.UpdateVariantAsync(id, variantId, request, ct), "Variant updated."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpDelete("{id:int}/variants/{variantId:int}")]
     public async Task<IActionResult> DeleteVariant(int id, int variantId, CancellationToken ct)
     {
@@ -128,22 +128,22 @@ public sealed class ProductsController : BaseApiController
         return Ok(ApiResponse.Ok("Variant deleted."));
     }
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPut("{id:int}/variants/{variantId:int}/stock")]
     public async Task<IActionResult> UpdateStock(int id, int variantId, [FromBody] StockUpdateRequest request, CancellationToken ct) =>
         Ok(ApiResponse<AdminVariantDto>.Ok(await _service.UpdateStockAsync(id, variantId, request.Count, ct), "Stock updated."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPost("{id:int}/options")]
     public async Task<IActionResult> AddOption(int id, [FromBody] OptionRequest request, CancellationToken ct) =>
         Ok(ApiResponse<OptionDto>.Ok(await _service.AddOptionAsync(id, request, ct), "Option added."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPut("{id:int}/options/{optionId:int}")]
     public async Task<IActionResult> UpdateOption(int id, int optionId, [FromBody] OptionRequest request, CancellationToken ct) =>
         Ok(ApiResponse<OptionDto>.Ok(await _service.UpdateOptionAsync(id, optionId, request, ct), "Option updated."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpDelete("{id:int}/options/{optionId:int}")]
     public async Task<IActionResult> DeleteOption(int id, int optionId, CancellationToken ct)
     {

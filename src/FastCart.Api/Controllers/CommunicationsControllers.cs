@@ -27,7 +27,7 @@ public sealed class NewsletterController : BaseApiController
 [ApiController]
 [Produces("application/json")]
 [Route("api/v1/admin/newsletter")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize(Roles = Roles.Management)]
 public sealed class AdminNewsletterController : ControllerBase
 {
     private readonly INewsletterService _service;
@@ -59,7 +59,7 @@ public sealed class ContactController : BaseApiController
 [ApiController]
 [Produces("application/json")]
 [Route("api/v1/admin/contact-messages")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize(Roles = Roles.Management)]
 public sealed class AdminContactMessagesController : ControllerBase
 {
     private readonly IContactService _service;

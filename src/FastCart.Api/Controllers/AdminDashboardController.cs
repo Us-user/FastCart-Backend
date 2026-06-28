@@ -10,7 +10,7 @@ namespace FastCart.Api.Controllers;
 [ApiController]
 [Produces("application/json")]
 [Route("api/v1/admin/dashboard")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize(Roles = Roles.Management)]
 public sealed class AdminDashboardController : ControllerBase
 {
     private readonly IDashboardService _dashboard;

@@ -23,7 +23,7 @@ public sealed class CategoriesController : BaseApiController
     public async Task<IActionResult> Get(int id, CancellationToken ct) =>
         Ok(ApiResponse<CategoryDto>.Ok(await _service.GetAsync(id, ct)));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPost]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> Create([FromForm] CategoryForm form, CancellationToken ct)
@@ -33,7 +33,7 @@ public sealed class CategoriesController : BaseApiController
         return Ok(ApiResponse<CategoryDto>.Ok(result, "Category created."));
     }
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPut("{id:int}")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> Update(int id, [FromForm] CategoryForm form, CancellationToken ct)
@@ -43,7 +43,7 @@ public sealed class CategoriesController : BaseApiController
         return Ok(ApiResponse<CategoryDto>.Ok(result, "Category updated."));
     }
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
@@ -83,17 +83,17 @@ public sealed class SubCategoriesController : BaseApiController
     public async Task<IActionResult> Get(int id, CancellationToken ct) =>
         Ok(ApiResponse<SubCategoryDto>.Ok(await _service.GetAsync(id, ct)));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] SubCategoryRequest request, CancellationToken ct) =>
         Ok(ApiResponse<SubCategoryDto>.Ok(await _service.CreateAsync(request, ct), "Subcategory created."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] SubCategoryRequest request, CancellationToken ct) =>
         Ok(ApiResponse<SubCategoryDto>.Ok(await _service.UpdateAsync(id, request, ct), "Subcategory updated."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
@@ -118,17 +118,17 @@ public sealed class BrandsController : BaseApiController
     public async Task<IActionResult> Get(int id, CancellationToken ct) =>
         Ok(ApiResponse<BrandDto>.Ok(await _service.GetAsync(id, ct)));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] BrandRequest request, CancellationToken ct) =>
         Ok(ApiResponse<BrandDto>.Ok(await _service.CreateAsync(request, ct), "Brand created."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] BrandRequest request, CancellationToken ct) =>
         Ok(ApiResponse<BrandDto>.Ok(await _service.UpdateAsync(id, request, ct), "Brand updated."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
@@ -153,17 +153,17 @@ public sealed class ColorsController : BaseApiController
     public async Task<IActionResult> Get(int id, CancellationToken ct) =>
         Ok(ApiResponse<ColorDto>.Ok(await _service.GetAsync(id, ct)));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] ColorRequest request, CancellationToken ct) =>
         Ok(ApiResponse<ColorDto>.Ok(await _service.CreateAsync(request, ct), "Color created."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] ColorRequest request, CancellationToken ct) =>
         Ok(ApiResponse<ColorDto>.Ok(await _service.UpdateAsync(id, request, ct), "Color updated."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
@@ -188,17 +188,17 @@ public sealed class TagsController : BaseApiController
     public async Task<IActionResult> Get(int id, CancellationToken ct) =>
         Ok(ApiResponse<TagDto>.Ok(await _service.GetAsync(id, ct)));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] TagRequest request, CancellationToken ct) =>
         Ok(ApiResponse<TagDto>.Ok(await _service.CreateAsync(request, ct), "Tag created."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] TagRequest request, CancellationToken ct) =>
         Ok(ApiResponse<TagDto>.Ok(await _service.UpdateAsync(id, request, ct), "Tag updated."));
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Management)]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {

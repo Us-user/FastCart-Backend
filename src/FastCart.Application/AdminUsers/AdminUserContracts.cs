@@ -13,7 +13,7 @@ public interface IAdminUserService
     /// <summary>Delete a user. Blocks (409) when RESTRICT dependents exist (coupon redemptions / returns).</summary>
     Task DeleteAsync(string id, string currentUserId, CancellationToken ct = default);
 
-    Task AssignRoleAsync(string id, string roleId, CancellationToken ct = default);
+    Task AssignRoleAsync(string id, string roleId, string currentUserId, CancellationToken ct = default);
     Task RemoveRoleAsync(string id, string roleId, string currentUserId, CancellationToken ct = default);
 
     Task<IReadOnlyList<RoleDto>> ListRolesAsync(CancellationToken ct = default);
