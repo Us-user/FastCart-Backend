@@ -45,8 +45,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
     // Ordering
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
-    public DbSet<Payment> Payments => Set<Payment>();
-    public DbSet<ReturnRequest> ReturnRequests => Set<ReturnRequest>();
 
     // Content
     public DbSet<Slider> Sliders => Set<Slider>();
@@ -294,8 +292,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
             e.Property(o => o.OrderNumber).HasMaxLength(32);
             e.Property(o => o.Currency).HasMaxLength(3);
             e.Property(o => o.Status).HasConversion<string>().HasMaxLength(20);
-            e.Property(o => o.PaymentStatus).HasConversion<string>().HasMaxLength(20);
+            e.Property(o => o.StatusBeforeReturn).HasConversion<string>().HasMaxLength(20);
             e.Property(o => o.PaymentMethod).HasConversion<string>().HasMaxLength(20);
+            e.Property(o => o.CancelReason).HasMaxLength(300);
+            e.Property(o => o.RejectReason).HasMaxLength(300);
+            e.Property(o => o.ReturnReason).HasMaxLength(500);
             e.HasIndex(o => o.OrderNumber).IsUnique();
             e.HasIndex(o => o.Status);
             e.HasIndex(o => o.CreatedAt);
@@ -322,31 +323,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
                 .WithMany()
                 .HasForeignKey(i => i.ProductVariantId)
                 .OnDelete(DeleteBehavior.SetNull);
-        });
-
-        b.Entity<Payment>(e =>
-        {
-            e.Property(p => p.Provider).HasMaxLength(50);
-            e.Property(p => p.Currency).HasMaxLength(3);
-            e.Property(p => p.Method).HasConversion<string>().HasMaxLength(20);
-            e.Property(p => p.Status).HasConversion<string>().HasMaxLength(20);
-            e.HasOne(p => p.Order)
-                .WithMany(o => o.Payments)
-                .HasForeignKey(p => p.OrderId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<ReturnRequest>(e =>
-        {
-            e.Property(r => r.Status).HasConversion<string>().HasMaxLength(20);
-            e.HasOne(r => r.Order)
-                .WithMany()
-                .HasForeignKey(r => r.OrderId)
-                .OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<ApplicationUser>()
-                .WithMany()
-                .HasForeignKey(r => r.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 

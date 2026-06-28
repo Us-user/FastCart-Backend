@@ -183,6 +183,13 @@ builder.Services.AddSwaggerGen(options =>
         Description = "FastCart e-commerce backend API."
     });
 
+    // Surface the /// summaries from controllers (Api) and DTOs (Application) in Swagger.
+    foreach (var xml in new[] { "FastCart.Api.xml", "FastCart.Application.xml" })
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, xml);
+        if (File.Exists(path)) options.IncludeXmlComments(path, includeControllerXmlComments: true);
+    }
+
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",

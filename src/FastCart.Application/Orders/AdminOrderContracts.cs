@@ -4,26 +4,36 @@ using FastCart.Domain.Enums;
 
 namespace FastCart.Application.Orders;
 
-/// <summary>Admin order &amp; return management (§6.11, §7.2, §7.4).</summary>
+/// <summary>
+/// Admin order management (§6.11). Drives the lifecycle through explicit actions —
+/// confirm / reject / deliver / approve-return / decline-return — and restores stock
+/// whenever an order is rejected or returned (§7.4).
+/// </summary>
 public interface IAdminOrderService
 {
     Task<PagedResult<OrderSummaryDto>> ListAsync(AdminOrderQuery query, CancellationToken ct = default);
     Task<OrderDto> GetAsync(int id, CancellationToken ct = default);
     Task<OrderDto> CreateOfflineAsync(AdminCreateOrderRequest request, CancellationToken ct = default);
-    Task<OrderDto> SetStatusAsync(int id, SetOrderStatusRequest request, CancellationToken ct = default);
-    Task<OrderDto> SetPaymentStatusAsync(int id, SetPaymentStatusRequest request, CancellationToken ct = default);
 
-    Task<PagedResult<AdminReturnDto>> ListReturnsAsync(ReturnStatus? status, int pageNumber, int pageSize, CancellationToken ct = default);
-    Task<AdminReturnDto> ResolveReturnAsync(int id, ResolveReturnRequest request, CancellationToken ct = default);
+    /// <summary>AwaitingConfirmation → InTransit.</summary>
+    Task<OrderDto> ConfirmAsync(int id, CancellationToken ct = default);
+    /// <summary>AwaitingConfirmation → Rejected (restores stock).</summary>
+    Task<OrderDto> RejectAsync(int id, RejectOrderRequest request, CancellationToken ct = default);
+    /// <summary>InTransit → Delivered.</summary>
+    Task<OrderDto> MarkDeliveredAsync(int id, CancellationToken ct = default);
+    /// <summary>ReturnRequested → Returned (restores stock).</summary>
+    Task<OrderDto> ApproveReturnAsync(int id, CancellationToken ct = default);
+    /// <summary>ReturnRequested → back to the status the order had before the return was requested.</summary>
+    Task<OrderDto> DeclineReturnAsync(int id, CancellationToken ct = default);
 }
 
 /// <summary>Filter/sort/page for the admin order list (§6.11).</summary>
 public sealed record AdminOrderQuery
 {
+    /// <summary>Filter by lifecycle status (e.g. <c>AwaitingConfirmation</c>, <c>ReturnRequested</c>).</summary>
     public OrderStatus? Status { get; init; }
-    public PaymentStatus? PaymentStatus { get; init; }
 
-    /// <summary>Matches order number, customer name or email.</summary>
+    /// <summary>Free-text match against order number, customer name or email.</summary>
     public string? Q { get; init; }
     public DateTime? From { get; init; }
     public DateTime? To { get; init; }
@@ -51,38 +61,14 @@ public sealed record AdminCreateOrderRequest
     [Required] public CheckoutAddressInput ShippingAddress { get; init; } = default!;
     public CheckoutAddressInput? BillingAddress { get; init; }
 
+    /// <summary>How the customer paid/will pay (informational only).</summary>
     [Required] public PaymentMethod PaymentMethod { get; init; }
-
-    /// <summary>Optional initial payment status (e.g. an already-paid offline order). Defaults to Pending.</summary>
-    public PaymentStatus? PaymentStatus { get; init; }
 
     [StringLength(500)] public string? CustomerNote { get; init; }
 }
 
-public sealed record SetOrderStatusRequest
+/// <summary>Reject an order awaiting confirmation (§7.2). Reason is optional but recommended.</summary>
+public sealed record RejectOrderRequest
 {
-    [Required] public OrderStatus Status { get; init; }
     [StringLength(300)] public string? Reason { get; init; }
 }
-
-public sealed record SetPaymentStatusRequest
-{
-    [Required] public PaymentStatus PaymentStatus { get; init; }
-}
-
-public sealed record ResolveReturnRequest
-{
-    /// <summary>Target state: <c>Approved</c>, <c>Rejected</c> or <c>Completed</c>.</summary>
-    [Required] public ReturnStatus Status { get; init; }
-}
-
-public sealed record AdminReturnDto(
-    int Id,
-    int OrderId,
-    string OrderNumber,
-    string? UserId,
-    string CustomerName,
-    string Reason,
-    ReturnStatus Status,
-    DateTime CreatedAt,
-    DateTime? ResolvedAt);

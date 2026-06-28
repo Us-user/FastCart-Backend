@@ -1,7 +1,6 @@
 using FastCart.Application.Common;
 using FastCart.Application.Common.Exceptions;
 using FastCart.Application.Orders;
-using FastCart.Application.Payments;
 using FastCart.Domain.Entities;
 using FastCart.Domain.Enums;
 using FastCart.Infrastructure.Commerce;
@@ -12,20 +11,19 @@ using Microsoft.Extensions.Configuration;
 namespace FastCart.Infrastructure.Orders;
 
 /// <summary>
-/// Checkout and customer order lifecycle (§6.10, §7.1–7.5). Checkout, cancel and pay run
-/// in a single transaction; prices, coupon discount and stock are recomputed server-side
-/// and never trusted from the client.
+/// Checkout and customer order lifecycle (§6.10, §7.1–7.5). Checkout and cancel run in a single
+/// transaction; prices, the coupon discount and stock are recomputed server-side and never trusted
+/// from the client. Stock is reserved at checkout and restored on cancel/reject/return (§7.4).
+/// Payment is not tracked here — the customer only picks a method; an admin verifies settlement.
 /// </summary>
 public sealed class OrderService : IOrderService
 {
     private readonly AppDbContext _db;
-    private readonly IPaymentProviderResolver _payments;
     private readonly IConfiguration _config;
 
-    public OrderService(AppDbContext db, IPaymentProviderResolver payments, IConfiguration config)
+    public OrderService(AppDbContext db, IConfiguration config)
     {
         _db = db;
-        _payments = payments;
         _config = config;
     }
 
@@ -109,15 +107,14 @@ public sealed class OrderService : IOrderService
             ? $"{profile.FirstName} {profile.LastName}".Trim()
             : $"{ship.FirstName} {ship.LastName}".Trim();
 
-        // 7. Create the order (New, payment Pending) with line snapshots.
+        // 7. Create the order awaiting admin confirmation, with line snapshots.
         var order = new Order
         {
             OrderNumber = await OrderingHelpers.GenerateOrderNumberAsync(_db, ct),
             UserId = userId,
             CustomerName = customerName,
             CustomerEmail = string.IsNullOrWhiteSpace(email) ? ship.Email : email!,
-            Status = OrderStatus.New,
-            PaymentStatus = PaymentStatus.Pending,
+            Status = OrderStatus.AwaitingConfirmation,
             PaymentMethod = request.PaymentMethod,
             Currency = "USD",
             Subtotal = subtotal,
@@ -148,22 +145,6 @@ public sealed class OrderService : IOrderService
             order.BillEmail = bill.Email;
         }
 
-        // 9. Record the payment behind the provider abstraction (§7.3).
-        var provider = _payments.Resolve(request.PaymentMethod);
-        var paymentResult = await provider.ChargeAsync(
-            new PaymentChargeRequest(order.OrderNumber, total, order.Currency, request.PaymentMethod, request.PaymentDetails?.Reference), ct);
-        order.PaymentStatus = paymentResult.Status;
-        order.Payments.Add(new Payment
-        {
-            Method = request.PaymentMethod,
-            Provider = paymentResult.Provider,
-            Amount = total,
-            Currency = order.Currency,
-            Status = paymentResult.Status,
-            Reference = paymentResult.Reference,
-            PaidAt = paymentResult.PaidAt
-        });
-
         _db.Orders.Add(order);
 
         // 8. Optionally persist the inline shipping address to the address book.
@@ -184,7 +165,7 @@ public sealed class OrderService : IOrderService
             });
         }
 
-        // 10. Decrement variant stock.
+        // 9. Reserve stock immediately (§7.4 — restored if cancelled/rejected/returned).
         foreach (var item in cart.Items)
         {
             item.ProductVariant.StockCount -= item.Quantity;
@@ -192,7 +173,7 @@ public sealed class OrderService : IOrderService
 
         await _db.SaveChangesAsync(ct); // assigns order.Id before redemption is written.
 
-        // 11. Record coupon usage.
+        // 10. Record coupon usage.
         if (coupon is not null)
         {
             coupon.TimesUsed += 1;
@@ -205,7 +186,7 @@ public sealed class OrderService : IOrderService
             });
         }
 
-        // 12. Clear the cart.
+        // 11. Clear the cart.
         _db.CartItems.RemoveRange(cart.Items);
 
         await _db.SaveChangesAsync(ct);
@@ -227,7 +208,7 @@ public sealed class OrderService : IOrderService
             .OrderByDescending(o => o.Id)
             .Skip((page - 1) * size).Take(size)
             .Select(o => new OrderSummaryDto(
-                o.Id, o.OrderNumber, o.Status, o.PaymentStatus, o.PaymentMethod, o.Total, o.Items.Count, o.CreatedAt))
+                o.Id, o.OrderNumber, o.Status, o.PaymentMethod, o.Total, o.Items.Count, o.CreatedAt))
             .ToListAsync(ct);
 
         return new PagedResult<OrderSummaryDto>(rows, page, size, total);
@@ -239,7 +220,7 @@ public sealed class OrderService : IOrderService
             .Include(o => o.Items)
             .FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId, ct)
             ?? throw new NotFoundException("Order not found.");
-        return Map(order);
+        return OrderingHelpers.MapOrder(order);
     }
 
     public async Task<OrderDto> CancelAsync(string userId, int id, CancelOrderRequest request, CancellationToken ct = default)
@@ -250,9 +231,9 @@ public sealed class OrderService : IOrderService
             .FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId, ct)
             ?? throw new NotFoundException("Order not found.");
 
-        if (order.Status is not (OrderStatus.New or OrderStatus.Ready))
+        if (order.Status != OrderStatus.AwaitingConfirmation)
         {
-            throw new BusinessRuleException("Only orders that are New or Ready can be cancelled.");
+            throw new BusinessRuleException("Only an order awaiting confirmation can be cancelled.");
         }
 
         order.Status = OrderStatus.Cancelled;
@@ -266,79 +247,21 @@ public sealed class OrderService : IOrderService
         return await GetMineAsync(userId, id, ct);
     }
 
-    public async Task<ReturnRequestDto> RequestReturnAsync(string userId, int id, CreateReturnRequest request, CancellationToken ct = default)
+    public async Task<OrderDto> RequestReturnAsync(string userId, int id, CreateReturnRequest request, CancellationToken ct = default)
     {
-        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId, ct)
-            ?? throw new NotFoundException("Order not found.");
-
-        if (order.Status != OrderStatus.Received)
-        {
-            throw new BusinessRuleException("Only received orders can be returned.");
-        }
-
-        var pending = await _db.ReturnRequests.AnyAsync(
-            r => r.OrderId == id && (r.Status == ReturnStatus.Requested || r.Status == ReturnStatus.Approved), ct);
-        if (pending)
-        {
-            throw new ConflictException("A return request for this order is already in progress.");
-        }
-
-        var rr = new ReturnRequest
-        {
-            OrderId = id,
-            UserId = userId,
-            Reason = request.Reason,
-            Status = ReturnStatus.Requested
-        };
-        _db.ReturnRequests.Add(rr);
-        await _db.SaveChangesAsync(ct);
-
-        return new ReturnRequestDto(rr.Id, id, order.OrderNumber, rr.Reason, rr.Status, rr.CreatedAt, rr.ResolvedAt);
-    }
-
-    public async Task<IReadOnlyList<ReturnRequestDto>> ListMyReturnsAsync(string userId, CancellationToken ct = default)
-    {
-        return await _db.ReturnRequests.AsNoTracking()
-            .Where(r => r.UserId == userId)
-            .OrderByDescending(r => r.Id)
-            .Select(r => new ReturnRequestDto(
-                r.Id, r.OrderId, r.Order.OrderNumber, r.Reason, r.Status, r.CreatedAt, r.ResolvedAt))
-            .ToListAsync(ct);
-    }
-
-    public async Task<OrderDto> PayAsync(string userId, int id, PayOrderRequest request, CancellationToken ct = default)
-    {
-        var order = await _db.Orders.Include(o => o.Payments)
+        var order = await _db.Orders.Include(o => o.Items)
             .FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId, ct)
             ?? throw new NotFoundException("Order not found.");
 
-        if (order.PaymentStatus == PaymentStatus.Paid)
+        if (order.Status is not (OrderStatus.InTransit or OrderStatus.Delivered))
         {
-            throw new BusinessRuleException("This order is already paid.");
-        }
-        if (order.Status is OrderStatus.Cancelled or OrderStatus.Returned)
-        {
-            throw new BusinessRuleException("This order can no longer be paid.");
+            throw new BusinessRuleException("A return can only be requested while an order is in transit or delivered.");
         }
 
-        var method = request.Method ?? order.PaymentMethod;
-        var provider = _payments.Resolve(method);
-        var result = await provider.ChargeAsync(
-            new PaymentChargeRequest(order.OrderNumber, order.Total, order.Currency, method, request.PaymentDetails?.Reference), ct);
-
-        order.PaymentMethod = method;
-        order.PaymentStatus = result.Status;
-        order.Payments.Add(new Payment
-        {
-            OrderId = order.Id,
-            Method = method,
-            Provider = result.Provider,
-            Amount = order.Total,
-            Currency = order.Currency,
-            Status = result.Status,
-            Reference = result.Reference,
-            PaidAt = result.PaidAt
-        });
+        order.StatusBeforeReturn = order.Status;
+        order.Status = OrderStatus.ReturnRequested;
+        order.ReturnRequestedAt = DateTime.UtcNow;
+        order.ReturnReason = request.Reason;
 
         await _db.SaveChangesAsync(ct);
         return await GetMineAsync(userId, id, ct);
@@ -365,8 +288,6 @@ public sealed class OrderService : IOrderService
             ["shippingAddress"] = new[] { "Provide a shippingAddressId or an inline shippingAddress." }
         });
     }
-
-    private static OrderDto Map(Order o) => OrderingHelpers.MapOrder(o);
 
     private sealed record AddressSnap(
         string FirstName, string LastName, string StreetAddress, string? Apartment, string City, string Phone, string Email);

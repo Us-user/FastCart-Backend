@@ -76,16 +76,12 @@ public sealed class AdminUserService : IAdminUserService
         }
 
         // Orders are kept (FK set-null); profile/addresses/cart/wishlist/reviews/tokens cascade.
-        // CouponRedemption and ReturnRequest are RESTRICT — block with a clear message (§6.14).
+        // CouponRedemption is RESTRICT — block with a clear message (§6.14).
         var hasRedemptions = await _db.CouponRedemptions.AnyAsync(r => r.UserId == id, ct);
-        var hasReturns = await _db.ReturnRequests.AnyAsync(r => r.UserId == id, ct);
-        if (hasRedemptions || hasReturns)
+        if (hasRedemptions)
         {
-            var blockers = new List<string>(2);
-            if (hasReturns) blockers.Add("return requests");
-            if (hasRedemptions) blockers.Add("coupon redemptions");
             throw new ConflictException(
-                $"Cannot delete this user: they have {string.Join(" and ", blockers)} on record. Remove or reassign those first.");
+                "Cannot delete this user: they have coupon redemptions on record. Remove or reassign those first.");
         }
 
         var result = await _users.DeleteAsync(user);

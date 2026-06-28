@@ -9,8 +9,9 @@ using Microsoft.EntityFrameworkCore;
 namespace FastCart.Infrastructure.Orders;
 
 /// <summary>
-/// Admin order &amp; return management (§6.11). Enforces the fulfillment lifecycle (§7.2)
-/// and restores stock / refunds on cancellation or completed return (§7.4).
+/// Admin order management (§6.11). Moves orders through their lifecycle via explicit actions
+/// (confirm / reject / deliver / approve-return / decline-return) and restores stock whenever an
+/// order is rejected or returned (§7.4).
 /// </summary>
 public sealed class AdminOrderService : IAdminOrderService
 {
@@ -25,7 +26,6 @@ public sealed class AdminOrderService : IAdminOrderService
 
         var q = _db.Orders.AsNoTracking().AsQueryable();
         if (query.Status is not null) q = q.Where(o => o.Status == query.Status);
-        if (query.PaymentStatus is not null) q = q.Where(o => o.PaymentStatus == query.PaymentStatus);
         var from = query.From.ToUtc();
         var to = query.To.ToUtc();
         if (from is not null) q = q.Where(o => o.CreatedAt >= from);
@@ -50,7 +50,7 @@ public sealed class AdminOrderService : IAdminOrderService
         var rows = await q
             .Skip((page - 1) * size).Take(size)
             .Select(o => new OrderSummaryDto(
-                o.Id, o.OrderNumber, o.Status, o.PaymentStatus, o.PaymentMethod, o.Total, o.Items.Count, o.CreatedAt))
+                o.Id, o.OrderNumber, o.Status, o.PaymentMethod, o.Total, o.Items.Count, o.CreatedAt))
             .ToListAsync(ct);
 
         return new PagedResult<OrderSummaryDto>(rows, page, size, total);
@@ -111,15 +111,13 @@ public sealed class AdminOrderService : IAdminOrderService
         subtotal = Math.Round(subtotal, 2);
 
         var ship = request.ShippingAddress;
-        var paymentStatus = request.PaymentStatus ?? PaymentStatus.Pending;
         var order = new Order
         {
             OrderNumber = await OrderingHelpers.GenerateOrderNumberAsync(_db, ct),
             UserId = null, // offline order (§5.5).
             CustomerName = request.CustomerName,
             CustomerEmail = request.CustomerEmail,
-            Status = OrderStatus.New,
-            PaymentStatus = paymentStatus,
+            Status = OrderStatus.AwaitingConfirmation,
             PaymentMethod = request.PaymentMethod,
             Currency = "USD",
             Subtotal = subtotal,
@@ -149,16 +147,6 @@ public sealed class AdminOrderService : IAdminOrderService
             order.BillEmail = bill.Email;
         }
 
-        order.Payments.Add(new Payment
-        {
-            Method = request.PaymentMethod,
-            Provider = request.PaymentMethod == PaymentMethod.CashOnDelivery ? "CashOnDelivery" : "Manual",
-            Amount = subtotal,
-            Currency = order.Currency,
-            Status = paymentStatus,
-            PaidAt = paymentStatus == PaymentStatus.Paid ? DateTime.UtcNow : null
-        });
-
         _db.Orders.Add(order);
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -166,133 +154,96 @@ public sealed class AdminOrderService : IAdminOrderService
         return await GetAsync(order.Id, ct);
     }
 
-    public async Task<OrderDto> SetStatusAsync(int id, SetOrderStatusRequest request, CancellationToken ct = default)
+    public async Task<OrderDto> ConfirmAsync(int id, CancellationToken ct = default)
     {
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        var order = await LoadAsync(id, ct);
+        Require(order.Status == OrderStatus.AwaitingConfirmation,
+            "Only an order awaiting confirmation can be confirmed.");
 
-        var order = await _db.Orders.Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == id, ct)
-            ?? throw new NotFoundException("Order not found.");
-
-        if (request.Status == order.Status)
-        {
-            throw new BusinessRuleException($"Order is already {order.Status}.");
-        }
-        if (!IsValidTransition(order.Status, request.Status))
-        {
-            throw new BusinessRuleException($"Cannot move an order from {order.Status} to {request.Status}.");
-        }
-
-        // Restore stock when moving into a stock-returning terminal state (§7.4).
-        if (request.Status is OrderStatus.Cancelled or OrderStatus.Returned)
-        {
-            await OrderingHelpers.RestoreStockAsync(_db, order, ct);
-        }
-        if (request.Status == OrderStatus.Cancelled)
-        {
-            order.CancelledAt = DateTime.UtcNow;
-            order.CancelReason = request.Reason;
-        }
-
-        order.Status = request.Status;
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-
-        return await GetAsync(id, ct);
-    }
-
-    public async Task<OrderDto> SetPaymentStatusAsync(int id, SetPaymentStatusRequest request, CancellationToken ct = default)
-    {
-        var order = await _db.Orders.Include(o => o.Payments).Include(o => o.Items)
-            .FirstOrDefaultAsync(o => o.Id == id, ct)
-            ?? throw new NotFoundException("Order not found.");
-
-        order.PaymentStatus = request.PaymentStatus;
-
-        // Reflect on the most recent payment record (§7.3).
-        var payment = order.Payments.OrderByDescending(p => p.Id).FirstOrDefault();
-        if (payment is not null)
-        {
-            payment.Status = request.PaymentStatus;
-            payment.PaidAt = request.PaymentStatus == PaymentStatus.Paid ? (payment.PaidAt ?? DateTime.UtcNow) : null;
-        }
+        order.Status = OrderStatus.InTransit;
+        order.ConfirmedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
         return await GetAsync(id, ct);
     }
 
-    public async Task<PagedResult<AdminReturnDto>> ListReturnsAsync(ReturnStatus? status, int pageNumber, int pageSize, CancellationToken ct = default)
-    {
-        var page = pageNumber < 1 ? 1 : pageNumber;
-        var size = pageSize is < 1 or > 100 ? 20 : pageSize;
-
-        var q = _db.ReturnRequests.AsNoTracking().AsQueryable();
-        if (status is not null) q = q.Where(r => r.Status == status);
-
-        var total = await q.CountAsync(ct);
-        var rows = await q
-            .OrderByDescending(r => r.Id)
-            .Skip((page - 1) * size).Take(size)
-            .Select(r => new AdminReturnDto(
-                r.Id, r.OrderId, r.Order.OrderNumber, r.Order.UserId, r.Order.CustomerName,
-                r.Reason, r.Status, r.CreatedAt, r.ResolvedAt))
-            .ToListAsync(ct);
-
-        return new PagedResult<AdminReturnDto>(rows, page, size, total);
-    }
-
-    public async Task<AdminReturnDto> ResolveReturnAsync(int id, ResolveReturnRequest request, CancellationToken ct = default)
+    public async Task<OrderDto> RejectAsync(int id, RejectOrderRequest request, CancellationToken ct = default)
     {
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
-        var rr = await _db.ReturnRequests.Include(r => r.Order).ThenInclude(o => o.Items)
-            .FirstOrDefaultAsync(r => r.Id == id, ct)
-            ?? throw new NotFoundException("Return request not found.");
+        var order = await LoadWithItemsAsync(id, ct);
+        Require(order.Status == OrderStatus.AwaitingConfirmation,
+            "Only an order awaiting confirmation can be rejected.");
 
-        switch (request.Status)
-        {
-            case ReturnStatus.Approved:
-            case ReturnStatus.Rejected:
-                if (rr.Status != ReturnStatus.Requested)
-                {
-                    throw new BusinessRuleException($"Only a requested return can be {request.Status}.");
-                }
-                rr.Status = request.Status;
-                if (request.Status == ReturnStatus.Rejected) rr.ResolvedAt = DateTime.UtcNow;
-                break;
-
-            case ReturnStatus.Completed:
-                if (rr.Status != ReturnStatus.Approved)
-                {
-                    throw new BusinessRuleException("Only an approved return can be completed.");
-                }
-                rr.Status = ReturnStatus.Completed;
-                rr.ResolvedAt = DateTime.UtcNow;
-
-                // §7.4 — completing a return restores stock, marks the order Returned and refunds.
-                await OrderingHelpers.RestoreStockAsync(_db, rr.Order, ct);
-                rr.Order.Status = OrderStatus.Returned;
-                rr.Order.PaymentStatus = PaymentStatus.Refunded;
-                break;
-
-            default:
-                throw new BusinessRuleException("Resolve a return as Approved, Rejected or Completed.");
-        }
+        order.Status = OrderStatus.Rejected;
+        order.RejectedAt = DateTime.UtcNow;
+        order.RejectReason = request.Reason;
+        await OrderingHelpers.RestoreStockAsync(_db, order, ct); // §7.4
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-
-        return new AdminReturnDto(
-            rr.Id, rr.OrderId, rr.Order.OrderNumber, rr.Order.UserId, rr.Order.CustomerName,
-            rr.Reason, rr.Status, rr.CreatedAt, rr.ResolvedAt);
+        return await GetAsync(id, ct);
     }
 
-    /// <summary>Allowed fulfillment transitions (§7.2).</summary>
-    private static bool IsValidTransition(OrderStatus from, OrderStatus to) => from switch
+    public async Task<OrderDto> MarkDeliveredAsync(int id, CancellationToken ct = default)
     {
-        OrderStatus.New => to is OrderStatus.Ready or OrderStatus.Cancelled,
-        OrderStatus.Ready => to is OrderStatus.Shipped or OrderStatus.Cancelled,
-        OrderStatus.Shipped => to is OrderStatus.Received,
-        OrderStatus.Received => to is OrderStatus.Returned,
-        _ => false // Cancelled / Returned are terminal.
-    };
+        var order = await LoadAsync(id, ct);
+        Require(order.Status == OrderStatus.InTransit,
+            "Only an order that is in transit can be marked delivered.");
+
+        order.Status = OrderStatus.Delivered;
+        order.DeliveredAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+        return await GetAsync(id, ct);
+    }
+
+    public async Task<OrderDto> ApproveReturnAsync(int id, CancellationToken ct = default)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+        var order = await LoadWithItemsAsync(id, ct);
+        Require(order.Status == OrderStatus.ReturnRequested,
+            "No return has been requested for this order.");
+
+        order.Status = OrderStatus.Returned;
+        order.ReturnedAt = DateTime.UtcNow;
+        order.StatusBeforeReturn = null;
+        await OrderingHelpers.RestoreStockAsync(_db, order, ct); // §7.4
+
+        await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return await GetAsync(id, ct);
+    }
+
+    public async Task<OrderDto> DeclineReturnAsync(int id, CancellationToken ct = default)
+    {
+        var order = await LoadAsync(id, ct);
+        Require(order.Status == OrderStatus.ReturnRequested,
+            "No return has been requested for this order.");
+
+        // Roll back to wherever the order was (in transit / delivered) before the return.
+        order.Status = order.StatusBeforeReturn ?? OrderStatus.Delivered;
+        order.StatusBeforeReturn = null;
+        order.ReturnRequestedAt = null;
+        order.ReturnReason = null;
+
+        await _db.SaveChangesAsync(ct);
+        return await GetAsync(id, ct);
+    }
+
+    // ---- helpers --------------------------------------------------------------
+
+    private async Task<Order> LoadAsync(int id, CancellationToken ct) =>
+        await _db.Orders.FirstOrDefaultAsync(o => o.Id == id, ct)
+        ?? throw new NotFoundException("Order not found.");
+
+    private async Task<Order> LoadWithItemsAsync(int id, CancellationToken ct) =>
+        await _db.Orders.Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == id, ct)
+        ?? throw new NotFoundException("Order not found.");
+
+    private static void Require(bool condition, string message)
+    {
+        if (!condition) throw new BusinessRuleException(message);
+    }
 }

@@ -211,36 +211,41 @@ POST /api/v1/auth/login
 
 ---
 
-## 12. Заказы покупателя — `/api/v1/orders` и `/api/v1/returns`
+## 12. Заказы покупателя — `/api/v1/orders`
 
 | Метод | Путь | Доступ | Назначение |
 |------|------|--------|-----------|
-| POST | `/orders/checkout` | 🔵 | Оформить заказ из корзины (одна транзакция: проверка остатков, пересчёт цен, купон, списание склада, очистка корзины). |
-| GET | `/orders` | 🔵 | Мои заказы. Фильтр `?status=` (например `Cancelled`). |
-| GET | `/orders/{id}` | 🔵 | Детали заказа. |
-| POST | `/orders/{id}/cancel` | 🔵 | Отменить заказ (склад возвращается). |
-| POST | `/orders/{id}/return` | 🔵 | Запросить возврат. Тело: `reason`. |
-| POST | `/orders/{id}/pay` | 🔵 | Оплатить заказ (через выбранный способ). |
-| GET | `/returns` | 🔵 | Мои запросы на возврат. |
+| POST | `/orders/checkout` | 🔵 | Оформить заказ из корзины (одна транзакция: проверка остатков, пересчёт цен, купон, **резерв склада**, очистка корзины). Заказ создаётся в статусе `AwaitingConfirmation`. |
+| GET | `/orders` | 🔵 | Мои заказы. Фильтр `?status=` (например `InTransit`). |
+| GET | `/orders/{id}` | 🔵 | Детали заказа (включая статус и таймстемпы шагов). |
+| POST | `/orders/{id}/cancel` | 🔵 | Отменить заказ — **только пока `AwaitingConfirmation`** (склад возвращается). Тело: `reason` (опц.). |
+| POST | `/orders/{id}/return` | 🔵 | Запросить возврат — когда заказ `InTransit` или `Delivered`. Тело: `reason`. |
 
 **Тело `checkout`** (основное): адрес доставки (`shippingAddress`), способ оплаты `paymentMethod` (`CashOnDelivery`/`Bank`), опционально `couponCode`, `customerNote`.
 
-**Статусы заказа:** `New → Ready → Shipped → Received`, плюс `Cancelled` и `Returned`.
-**Статусы оплаты:** `Pending`, `Paid`, `Failed`, `Refunded`.
+**Жизненный цикл заказа:**
+`AwaitingConfirmation` → (админ подтвердил) `InTransit` → (админ отметил) `Delivered`.
+Терминальные: `Cancelled` (отменил покупатель), `Rejected` (отклонил админ).
+Возврат: из `InTransit`/`Delivered` покупатель шлёт заявку → `ReturnRequested` → (админ подтвердил) `Returned`.
+
+> Оплата не отслеживается в системе — `paymentMethod` лишь фиксирует выбор покупателя; факт оплаты админ проверяет вручную. Каждый шаг проставляет свой таймстемп: `confirmedAt`, `deliveredAt`, `cancelledAt`/`cancelReason`, `rejectedAt`/`rejectReason`, `returnRequestedAt`/`returnReason`, `returnedAt`.
 
 ---
 
-## 13. Админ: заказы и возвраты
+## 13. Админ: заказы и возвраты — `/api/v1/admin/orders`
+
+Жизненный цикл управляется **явными действиями** (под каждую кнопку в админке):
 
 | Метод | Путь | Доступ | Назначение |
 |------|------|--------|-----------|
-| GET | `/admin/orders` | 🔴 | Все заказы. Фильтры: `status`, `paymentStatus`, `q` (поиск), `from`, `to`, `sort`, пагинация. |
+| GET | `/admin/orders` | 🔴 | Все заказы. Фильтры: `status`, `q` (поиск), `from`, `to`, `sort`, пагинация. Очередь на подтверждение — `?status=AwaitingConfirmation`; ожидающие возвраты — `?status=ReturnRequested`. |
 | GET | `/admin/orders/{id}` | 🔴 | Детали заказа. |
-| POST | `/admin/orders` | 🔴 | Создать офлайн-заказ вручную («Add order»). |
-| PUT | `/admin/orders/{id}/status` | 🔴 | Сменить статус (с проверкой допустимых переходов). Тело: `status`, `reason`. |
-| PUT | `/admin/orders/{id}/payment-status` | 🔴 | Сменить статус оплаты. Тело: `paymentStatus`. |
-| GET | `/admin/returns` | 🔴 | Список возвратов. Фильтр `?status=`. |
-| PUT | `/admin/returns/{id}` | 🔴 | Решение по возврату: `Approved` / `Rejected` / `Completed` (при Completed — возврат склада + рефанд). |
+| POST | `/admin/orders` | 🔴 | Создать офлайн-заказ вручную («Add order»). Стартует в `AwaitingConfirmation`. |
+| POST | `/admin/orders/{id}/confirm` | 🔴 | Подтвердить заказ → `InTransit`. |
+| POST | `/admin/orders/{id}/reject` | 🔴 | Отклонить заказ → `Rejected` (склад возвращается). Тело: `reason` (опц.). |
+| POST | `/admin/orders/{id}/deliver` | 🔴 | Отметить доставленным → `Delivered`. |
+| POST | `/admin/orders/{id}/return/approve` | 🔴 | Подтвердить возврат → `Returned` (склад возвращается). |
+| POST | `/admin/orders/{id}/return/decline` | 🔴 | Отклонить возврат — заказ откатывается в прежний статус (`InTransit`/`Delivered`). |
 
 ---
 
@@ -253,7 +258,7 @@ POST /api/v1/auth/login
 | GET | `/admin/dashboard/top-products` | 🔴 | Топ товаров. `?metric=sales\|units&take=`. |
 | GET | `/admin/dashboard/recent-transactions` | 🔴 | Последние транзакции. `?take=`. |
 
-> Прибыль считается по снимкам цены/себестоимости в момент покупки — поэтому она не «плывёт» при последующем изменении цен. В продажи/прибыль **не** входят заказы `Cancelled` и `Returned`.
+> Прибыль считается по снимкам цены/себестоимости в момент покупки — поэтому она не «плывёт» при последующем изменении цен. В продажи/прибыль **не** входят заказы `Cancelled`, `Rejected` и `Returned`.
 
 ---
 
@@ -296,7 +301,7 @@ POST /api/v1/auth/login
 |------|------|--------|-----------|
 | GET | `/admin/users` | 🔴 | Список пользователей (фильтр + пагинация). |
 | GET | `/admin/users/{id}` | 🔴 | Детали пользователя (+ профиль). |
-| DELETE | `/admin/users/{id}` | 🔴 | Удалить пользователя (блокируется, если есть связанные возвраты/использования купонов → 409). |
+| DELETE | `/admin/users/{id}` | 🔴 | Удалить пользователя (блокируется, если есть использования купонов → 409). |
 | POST | `/admin/users/{id}/roles` | 🔴 | Назначить роль. Тело: `roleId` или `roleName`. |
 | DELETE | `/admin/users/{id}/roles/{roleId}` | 🔴 | Снять роль. |
 | GET | `/admin/roles` | 🔴 | Список ролей. |

@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace FastCart.Api.Controllers;
 
-/// <summary>Products & variants (§6.5). Base route: <c>/api/v1/products</c>.</summary>
+/// <summary>Products &amp; variants (§6.5). Base route: <c>/api/v1/products</c>.</summary>
 public sealed class ProductsController : BaseApiController
 {
     private static readonly JsonSerializerOptions JsonOpts = new()

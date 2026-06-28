@@ -3,7 +3,11 @@ using FastCart.Domain.Enums;
 
 namespace FastCart.Domain.Entities;
 
-/// <summary>Customer or admin-offline order with address snapshots (§5.5, §7.1).</summary>
+/// <summary>
+/// Customer or admin-offline order with address + line snapshots (§5.5). The lifecycle is
+/// driven entirely by <see cref="Status"/>; each transition stamps its own timestamp/reason
+/// so the customer and admin can always see exactly where an order stands.
+/// </summary>
 public class Order : BaseEntity
 {
     public string OrderNumber { get; set; } = default!;
@@ -13,8 +17,9 @@ public class Order : BaseEntity
     public string CustomerName { get; set; } = default!;
     public string CustomerEmail { get; set; } = default!;
 
-    public OrderStatus Status { get; set; } = OrderStatus.New;
-    public PaymentStatus PaymentStatus { get; set; } = PaymentStatus.Pending;
+    public OrderStatus Status { get; set; } = OrderStatus.AwaitingConfirmation;
+
+    /// <summary>How the customer chose to pay. Informational only — payment is verified manually.</summary>
     public PaymentMethod PaymentMethod { get; set; }
     public string Currency { get; set; } = "USD";
 
@@ -25,6 +30,28 @@ public class Order : BaseEntity
     public decimal ShippingAmount { get; set; }
     public decimal Total { get; set; }
     public string? CustomerNote { get; set; }
+
+    // ---- Lifecycle timestamps & reasons --------------------------------------
+    /// <summary>When an admin confirmed the order (→ InTransit).</summary>
+    public DateTime? ConfirmedAt { get; set; }
+    /// <summary>When an admin marked the order delivered.</summary>
+    public DateTime? DeliveredAt { get; set; }
+
+    /// <summary>When the customer cancelled the order while awaiting confirmation.</summary>
+    public DateTime? CancelledAt { get; set; }
+    public string? CancelReason { get; set; }
+
+    /// <summary>When an admin rejected the order.</summary>
+    public DateTime? RejectedAt { get; set; }
+    public string? RejectReason { get; set; }
+
+    /// <summary>When the customer requested a return.</summary>
+    public DateTime? ReturnRequestedAt { get; set; }
+    public string? ReturnReason { get; set; }
+    /// <summary>When an admin approved the return (→ Returned).</summary>
+    public DateTime? ReturnedAt { get; set; }
+    /// <summary>The status the order was in before a return was requested, so a declined return can restore it.</summary>
+    public OrderStatus? StatusBeforeReturn { get; set; }
 
     // Shipping address snapshot.
     public string ShipFirstName { get; set; } = default!;
@@ -44,11 +71,7 @@ public class Order : BaseEntity
     public string? BillPhone { get; set; }
     public string? BillEmail { get; set; }
 
-    public DateTime? CancelledAt { get; set; }
-    public string? CancelReason { get; set; }
-
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
-    public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }
 
 /// <summary>
@@ -69,31 +92,4 @@ public class OrderItem : BaseEntity
     public decimal UnitCost { get; set; }
     public int Quantity { get; set; }
     public decimal LineTotal { get; set; }
-}
-
-/// <summary>Payment record behind the IPaymentProvider abstraction (§5.5, §7.3, D2/D3).</summary>
-public class Payment : BaseEntity
-{
-    public int OrderId { get; set; }
-    public Order Order { get; set; } = default!;
-    public PaymentMethod Method { get; set; }
-    public string Provider { get; set; } = "Manual";
-    public decimal Amount { get; set; }
-    public string Currency { get; set; } = "USD";
-    public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
-
-    /// <summary>Non-sensitive reference only — no PAN/CVV is ever stored (D3).</summary>
-    public string? Reference { get; set; }
-    public DateTime? PaidAt { get; set; }
-}
-
-/// <summary>Lightweight return request (§5.5, §7.4).</summary>
-public class ReturnRequest : BaseEntity
-{
-    public int OrderId { get; set; }
-    public Order Order { get; set; } = default!;
-    public string UserId { get; set; } = default!;
-    public string Reason { get; set; } = default!;
-    public ReturnStatus Status { get; set; } = ReturnStatus.Requested;
-    public DateTime? ResolvedAt { get; set; }
 }

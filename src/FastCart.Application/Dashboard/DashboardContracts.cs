@@ -5,7 +5,7 @@ namespace FastCart.Application.Dashboard;
 /// <summary>
 /// Admin dashboard analytics (§6.15). All figures derive from order-line snapshots
 /// (<c>UnitPrice</c>/<c>UnitCost</c>) so profit stays stable even if catalog costs
-/// change later (D9). Cancelled and Returned orders are excluded from sales/profit.
+/// change later (D9). Cancelled, Rejected and Returned orders are excluded from sales/profit.
 /// </summary>
 public interface IDashboardService
 {
@@ -46,13 +46,12 @@ public sealed record TopProductDto(
     int UnitsSold,
     decimal Sales);
 
-/// <summary>Recent order/payment activity for the dashboard feed (§6.15).</summary>
+/// <summary>Recent order activity for the dashboard feed (§6.15).</summary>
 public sealed record RecentTransactionDto(
     int OrderId,
     string OrderNumber,
     string CustomerName,
     decimal Total,
-    PaymentStatus PaymentStatus,
     PaymentMethod PaymentMethod,
     OrderStatus Status,
     DateTime CreatedAt);

@@ -10,14 +10,18 @@ internal static class OrderingHelpers
 {
     /// <summary>Project a fully-loaded order (with <c>Items</c>) to its DTO.</summary>
     public static OrderDto MapOrder(Order o) => new(
-        o.Id, o.OrderNumber, o.Status, o.PaymentStatus, o.PaymentMethod, o.Currency,
+        o.Id, o.OrderNumber, o.Status, o.PaymentMethod, o.Currency,
         o.Subtotal, o.DiscountAmount, o.CouponCode, o.TaxAmount, o.ShippingAmount, o.Total,
         o.CustomerName, o.CustomerEmail, o.CustomerNote,
         new AddressSnapshotDto(o.ShipFirstName, o.ShipLastName, o.ShipStreetAddress, o.ShipApartment, o.ShipCity, o.ShipPhone, o.ShipEmail),
         o.BillFirstName is null
             ? null
             : new AddressSnapshotDto(o.BillFirstName, o.BillLastName!, o.BillStreetAddress!, o.BillApartment, o.BillCity!, o.BillPhone!, o.BillEmail!),
-        o.CancelledAt, o.CancelReason, o.CreatedAt,
+        o.ConfirmedAt, o.DeliveredAt,
+        o.CancelledAt, o.CancelReason,
+        o.RejectedAt, o.RejectReason,
+        o.ReturnRequestedAt, o.ReturnReason, o.ReturnedAt,
+        o.CreatedAt,
         o.Items.OrderBy(i => i.Id).Select(i => new OrderItemDto(
             i.Id, i.ProductId, i.ProductVariantId, i.ProductName, i.Sku, i.VariantDescription, i.UnitPrice, i.Quantity, i.LineTotal)).ToList());
 
@@ -44,7 +48,7 @@ internal static class OrderingHelpers
         return string.IsNullOrEmpty(desc) ? null : desc;
     }
 
-    /// <summary>Restore per-variant stock for an order's lines (cancel/return, §7.4).</summary>
+    /// <summary>Restore per-variant stock for an order's lines (cancel/reject/return, §7.4).</summary>
     public static async Task RestoreStockAsync(AppDbContext db, Order order, CancellationToken ct)
     {
         var variantIds = order.Items

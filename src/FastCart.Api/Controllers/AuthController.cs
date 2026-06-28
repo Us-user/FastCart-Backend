@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace FastCart.Api.Controllers;
 
-/// <summary>Authentication & accounts (§6.1). Base route: <c>/api/v1/auth</c>.</summary>
+/// <summary>Authentication &amp; accounts (§6.1). Base route: <c>/api/v1/auth</c>.</summary>
 [EnableRateLimiting("auth")]
 public sealed class AuthController : BaseApiController
 {

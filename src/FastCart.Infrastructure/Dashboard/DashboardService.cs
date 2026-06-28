@@ -10,8 +10,8 @@ namespace FastCart.Infrastructure.Dashboard;
 /// <summary>
 /// Admin dashboard reporting (§6.15). Sales/Cost/Profit come from order-line snapshots
 /// (<c>UnitPrice</c>/<c>UnitCost</c>) so history is stable across later cost edits (D9).
-/// Cancelled and Returned orders are excluded from sales/profit aggregates; everything
-/// else (New → Received) counts as a booked sale.
+/// Cancelled, Rejected and Returned orders are excluded from sales/profit aggregates;
+/// everything else (awaiting confirmation → delivered) counts as a booked sale.
 /// </summary>
 public sealed class DashboardService : IDashboardService
 {
@@ -109,18 +109,20 @@ public sealed class DashboardService : IDashboardService
             .Take(n)
             .Select(o => new RecentTransactionDto(
                 o.Id, o.OrderNumber, o.CustomerName, o.Total,
-                o.PaymentStatus, o.PaymentMethod, o.Status, o.CreatedAt))
+                o.PaymentMethod, o.Status, o.CreatedAt))
             .ToListAsync(ct);
     }
 
     /// <summary>Orders that count toward sales/profit — everything except the reversed terminal states.</summary>
     private IQueryable<Domain.Entities.Order> CountedOrders() =>
-        _db.Orders.AsNoTracking()
-            .Where(o => o.Status != OrderStatus.Cancelled && o.Status != OrderStatus.Returned);
+        _db.Orders.AsNoTracking().Where(o => !ReversedStatuses.Contains(o.Status));
 
     private IQueryable<Domain.Entities.OrderItem> CountedOrderItems() =>
-        _db.OrderItems.AsNoTracking()
-            .Where(oi => oi.Order.Status != OrderStatus.Cancelled && oi.Order.Status != OrderStatus.Returned);
+        _db.OrderItems.AsNoTracking().Where(oi => !ReversedStatuses.Contains(oi.Order.Status));
+
+    /// <summary>Terminal states whose revenue never counts (cancelled / rejected / returned).</summary>
+    private static readonly OrderStatus[] ReversedStatuses =
+        { OrderStatus.Cancelled, OrderStatus.Rejected, OrderStatus.Returned };
 
     private static decimal Round(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 }

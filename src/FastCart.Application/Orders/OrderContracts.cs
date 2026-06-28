@@ -11,9 +11,7 @@ public interface IOrderService
     Task<PagedResult<OrderSummaryDto>> ListMineAsync(string userId, OrderStatus? status, int pageNumber, int pageSize, CancellationToken ct = default);
     Task<OrderDto> GetMineAsync(string userId, int id, CancellationToken ct = default);
     Task<OrderDto> CancelAsync(string userId, int id, CancelOrderRequest request, CancellationToken ct = default);
-    Task<ReturnRequestDto> RequestReturnAsync(string userId, int id, CreateReturnRequest request, CancellationToken ct = default);
-    Task<IReadOnlyList<ReturnRequestDto>> ListMyReturnsAsync(string userId, CancellationToken ct = default);
-    Task<OrderDto> PayAsync(string userId, int id, PayOrderRequest request, CancellationToken ct = default);
+    Task<OrderDto> RequestReturnAsync(string userId, int id, CreateReturnRequest request, CancellationToken ct = default);
 }
 
 // ---- Requests ----------------------------------------------------------------
@@ -30,46 +28,40 @@ public sealed record CheckoutAddressInput
     [Required, EmailAddress] public string Email { get; init; } = default!;
 }
 
-/// <summary>Optional, non-sensitive payment details (§7.3, D3). No card number/CVV is stored.</summary>
-public sealed record PaymentDetailsInput
-{
-    [StringLength(100)] public string? Reference { get; init; }
-}
-
 /// <summary>
-/// Checkout body (§7.1). Provide the shipping address either by <see cref="ShippingAddressId"/>
-/// (from the address book) or inline via <see cref="ShippingAddress"/>. Billing is optional and
-/// defaults to the shipping address when omitted.
+/// Place an order from the current cart (§7.1). Provide the shipping address either by
+/// <see cref="ShippingAddressId"/> (from the address book) or inline via <see cref="ShippingAddress"/>;
+/// billing is optional and defaults to shipping. The order is created as
+/// <c>AwaitingConfirmation</c> and stock is reserved immediately. Prices, the coupon discount
+/// and stock are always recomputed server-side — values from the client are ignored.
 /// </summary>
 public sealed record CheckoutRequest
 {
+    /// <summary>Use a saved address by id, or omit and pass <see cref="ShippingAddress"/> inline.</summary>
     public int? ShippingAddressId { get; init; }
     public CheckoutAddressInput? ShippingAddress { get; init; }
     public CheckoutAddressInput? BillingAddress { get; init; }
+
+    /// <summary>When true and an inline shipping address was given, also save it to the address book.</summary>
     public bool SaveAddress { get; init; }
 
+    /// <summary>How the customer intends to pay. Informational — payment is verified manually by an admin.</summary>
     [Required] public PaymentMethod PaymentMethod { get; init; }
-    public PaymentDetailsInput? PaymentDetails { get; init; }
 
     [StringLength(64)] public string? CouponCode { get; init; }
     [StringLength(500)] public string? CustomerNote { get; init; }
 }
 
+/// <summary>Cancel an order that is still <c>AwaitingConfirmation</c> (§7.4). Reason is optional.</summary>
 public sealed record CancelOrderRequest
 {
     [StringLength(300)] public string? Reason { get; init; }
 }
 
+/// <summary>Request a return for an <c>InTransit</c> or <c>Delivered</c> order (§7.4).</summary>
 public sealed record CreateReturnRequest
 {
     [Required, StringLength(500)] public string Reason { get; init; } = default!;
-}
-
-/// <summary>Record a payment against an existing order (§6.10). Defaults to the order's method.</summary>
-public sealed record PayOrderRequest
-{
-    public PaymentMethod? Method { get; init; }
-    public PaymentDetailsInput? PaymentDetails { get; init; }
 }
 
 // ---- Responses ---------------------------------------------------------------
@@ -94,11 +86,11 @@ public sealed record OrderItemDto(
     int Quantity,
     decimal LineTotal);
 
+/// <summary>Full order detail, including the current lifecycle status and its timestamps.</summary>
 public sealed record OrderDto(
     int Id,
     string OrderNumber,
     OrderStatus Status,
-    PaymentStatus PaymentStatus,
     PaymentMethod PaymentMethod,
     string Currency,
     decimal Subtotal,
@@ -112,26 +104,24 @@ public sealed record OrderDto(
     string? CustomerNote,
     AddressSnapshotDto ShippingAddress,
     AddressSnapshotDto? BillingAddress,
+    DateTime? ConfirmedAt,
+    DateTime? DeliveredAt,
     DateTime? CancelledAt,
     string? CancelReason,
+    DateTime? RejectedAt,
+    string? RejectReason,
+    DateTime? ReturnRequestedAt,
+    string? ReturnReason,
+    DateTime? ReturnedAt,
     DateTime CreatedAt,
     IReadOnlyList<OrderItemDto> Items);
 
+/// <summary>Compact order row for lists (customer "My orders" and the admin order table).</summary>
 public sealed record OrderSummaryDto(
     int Id,
     string OrderNumber,
     OrderStatus Status,
-    PaymentStatus PaymentStatus,
     PaymentMethod PaymentMethod,
     decimal Total,
     int ItemCount,
     DateTime CreatedAt);
-
-public sealed record ReturnRequestDto(
-    int Id,
-    int OrderId,
-    string OrderNumber,
-    string Reason,
-    ReturnStatus Status,
-    DateTime CreatedAt,
-    DateTime? ResolvedAt);

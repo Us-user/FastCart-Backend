@@ -3,7 +3,7 @@ using FastCart.Domain.Enums;
 
 namespace FastCart.Application.Catalog;
 
-/// <summary>Products & variants (§6.5). Implemented in Infrastructure.</summary>
+/// <summary>Products &amp; variants (§6.5). Implemented in Infrastructure.</summary>
 public interface IProductService
 {
     Task<PagedResult<ProductListItemDto>> ListAsync(ProductFilter filter, CancellationToken ct = default);

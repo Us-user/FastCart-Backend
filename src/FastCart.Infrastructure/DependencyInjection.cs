@@ -9,7 +9,6 @@ using FastCart.Application.Content;
 using FastCart.Application.Dashboard;
 using FastCart.Application.Coupons;
 using FastCart.Application.Orders;
-using FastCart.Application.Payments;
 using FastCart.Application.Profile;
 using FastCart.Application.Reviews;
 using FastCart.Application.Wishlists;
@@ -21,7 +20,6 @@ using FastCart.Infrastructure.Dashboard;
 using FastCart.Infrastructure.Identity;
 using FastCart.Infrastructure.Messaging;
 using FastCart.Infrastructure.Orders;
-using FastCart.Infrastructure.Payments;
 using FastCart.Infrastructure.Persistence;
 using FastCart.Infrastructure.Storage;
 using Microsoft.AspNetCore.Identity;
@@ -92,10 +90,8 @@ public static class DependencyInjection
         services.AddScoped<IReviewService, ReviewService>();
         services.AddScoped<ICouponService, CouponService>();
 
-        // Phase 5 — payment providers (record-and-hold, §7.3/D2) + orders/checkout.
-        services.AddScoped<IPaymentProvider, CashOnDeliveryPaymentProvider>();
-        services.AddScoped<IPaymentProvider, ManualPaymentProvider>();
-        services.AddScoped<IPaymentProviderResolver, PaymentProviderResolver>();
+        // Phase 5 — orders/checkout. Payment is method-only (verified manually), so there are
+        // no payment providers: the lifecycle is driven purely by order status.
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<IAdminOrderService, AdminOrderService>();
 
