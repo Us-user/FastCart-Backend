@@ -95,7 +95,8 @@ public sealed record AuthUserDto(
     string UserName,
     string? Email,
     string? PhoneNumber,
-    IReadOnlyList<string> Roles);
+    IReadOnlyList<string> Roles,
+    bool TelegramLinked);
 
 /// <summary>Access + rotating refresh token pair (§4.4).</summary>
 public sealed record AuthResult(
@@ -114,4 +115,5 @@ public sealed record MeResponse(
     string? Email,
     string? PhoneNumber,
     IReadOnlyList<string> Roles,
+    bool TelegramLinked,
     ProfileDto? Profile);

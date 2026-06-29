@@ -11,6 +11,7 @@ using FastCart.Application.Coupons;
 using FastCart.Application.Orders;
 using FastCart.Application.Profile;
 using FastCart.Application.Reviews;
+using FastCart.Application.Telegram;
 using FastCart.Application.Wishlists;
 using FastCart.Infrastructure.Catalog;
 using FastCart.Infrastructure.Commerce;
@@ -62,6 +63,21 @@ public static class DependencyInjection
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IAddressService, AddressService>();
         services.AddScoped<IEmailSender, LoggingEmailSender>();
+
+        // Telegram link + reset channel. Real Bot API sender when a token is configured,
+        // else a dev logging sender (mirrors IEmailSender / R2-vs-local storage).
+        var telegram = TelegramOptions.FromConfiguration(configuration);
+        services.AddSingleton(telegram);
+        if (telegram.IsConfigured)
+        {
+            services.AddScoped<ITelegramSender, TelegramBotSender>();
+        }
+        else
+        {
+            services.AddScoped<ITelegramSender, LoggingTelegramSender>();
+        }
+        services.AddScoped<ITelegramLinkService, TelegramLinkService>();
+        services.AddScoped<IPasswordResetService, PasswordResetService>();
 
         // Storage — Cloudflare R2 when configured (§9.3/D12), else local disk for dev.
         var r2 = configuration.GetSection("Storage:R2");

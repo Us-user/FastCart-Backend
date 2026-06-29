@@ -14,6 +14,15 @@ public class ApplicationUser : IdentityUser, IAuditable
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
+    // Telegram link (password-reset channel). Nullable until the user links their account;
+    // ChatId is unique so a Telegram chat maps to at most one FastCart account.
+    public long? TelegramChatId { get; set; }
+    public long? TelegramUserId { get; set; }
+    public DateTime? TelegramLinkedAt { get; set; }
+
+    /// <summary>True once the account is linked to a Telegram chat (drives the "link required" prompt).</summary>
+    public bool IsTelegramLinked => TelegramChatId is not null;
+
     public UserProfile? Profile { get; set; }
     public ICollection<Address> Addresses { get; set; } = new List<Address>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();

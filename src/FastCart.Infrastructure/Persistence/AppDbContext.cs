@@ -18,6 +18,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
     // Accounts
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<TelegramLinkToken> TelegramLinkTokens => Set<TelegramLinkToken>();
+    public DbSet<PasswordResetCode> PasswordResetCodes => Set<PasswordResetCode>();
     public DbSet<Address> Addresses => Set<Address>();
 
     // Catalog
@@ -90,6 +92,34 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
             e.HasOne<ApplicationUser>()
                 .WithMany(u => u.RefreshTokens)
                 .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Telegram chat_id is unique across accounts (multiple NULLs allowed by Postgres,
+        // so unlinked users don't collide).
+        b.Entity<ApplicationUser>()
+            .HasIndex(u => u.TelegramChatId)
+            .IsUnique();
+
+        b.Entity<TelegramLinkToken>(e =>
+        {
+            e.Property(t => t.Token).HasMaxLength(128);
+            e.HasIndex(t => t.Token).IsUnique();
+            e.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<PasswordResetCode>(e =>
+        {
+            e.Property(c => c.CodeHash).HasMaxLength(128);
+            e.Property(c => c.ChangeTokenHash).HasMaxLength(128);
+            e.HasIndex(c => c.UserId);
+            e.HasIndex(c => c.ChangeTokenHash);
+            e.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(c => c.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

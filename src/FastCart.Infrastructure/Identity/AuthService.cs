@@ -162,6 +162,7 @@ public sealed class AuthService : IAuthService
             user.Email,
             user.PhoneNumber,
             roles.ToList(),
+            user.IsTelegramLinked,
             profile is null
                 ? null
                 : new ProfileDto(profile.FirstName, profile.LastName, user.Email, user.PhoneNumber, profile.Dob, profile.ImageUrl));
@@ -204,7 +205,7 @@ public sealed class AuthService : IAuthService
         });
         await _db.SaveChangesAsync(ct);
 
-        var user_ = new AuthUserDto(user.Id, user.UserName!, user.Email, user.PhoneNumber, roles.ToList());
+        var user_ = new AuthUserDto(user.Id, user.UserName!, user.Email, user.PhoneNumber, roles.ToList(), user.IsTelegramLinked);
         return new AuthResult(accessToken, refreshToken, expiresAt, user_);
     }
 

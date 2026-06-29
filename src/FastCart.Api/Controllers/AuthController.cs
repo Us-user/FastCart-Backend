@@ -11,8 +11,13 @@ namespace FastCart.Api.Controllers;
 public sealed class AuthController : BaseApiController
 {
     private readonly IAuthService _auth;
+    private readonly IPasswordResetService _reset;
 
-    public AuthController(IAuthService auth) => _auth = auth;
+    public AuthController(IAuthService auth, IPasswordResetService reset)
+    {
+        _auth = auth;
+        _reset = reset;
+    }
 
     [AllowAnonymous]
     [HttpPost("register")]
@@ -60,6 +65,33 @@ public sealed class AuthController : BaseApiController
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request, CancellationToken ct)
     {
         await _auth.ResetPasswordAsync(request, ct);
+        return Ok(ApiResponse.Ok("Password has been reset."));
+    }
+
+    // --- Telegram-delivered reset (§4.4). Coexists with the email reset above. ---
+
+    [AllowAnonymous]
+    [HttpPost("reset/request")]
+    public async Task<IActionResult> ResetRequest([FromBody] TelegramResetRequestRequest request, CancellationToken ct)
+    {
+        await _reset.RequestAsync(request, ct);
+        // Anti-enumeration: always 200, regardless of account existence or Telegram link state.
+        return Ok(ApiResponse.Ok("If the account exists and Telegram is linked, a code has been sent."));
+    }
+
+    [AllowAnonymous]
+    [HttpPost("reset/verify")]
+    public async Task<IActionResult> ResetVerify([FromBody] TelegramResetVerifyRequest request, CancellationToken ct)
+    {
+        var result = await _reset.VerifyAsync(request, ct);
+        return Ok(ApiResponse<TelegramResetVerifyResponse>.Ok(result, "Code verified."));
+    }
+
+    [AllowAnonymous]
+    [HttpPost("reset/confirm")]
+    public async Task<IActionResult> ResetConfirm([FromBody] TelegramResetConfirmRequest request, CancellationToken ct)
+    {
+        await _reset.ConfirmAsync(request, ct);
         return Ok(ApiResponse.Ok("Password has been reset."));
     }
 
